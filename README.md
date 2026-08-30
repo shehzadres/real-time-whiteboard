@@ -10,7 +10,7 @@ A production-grade real-time collaborative whiteboard where multiple users can j
 
 | Layer | Technologies |
 |---|---|
-| Frontend | Next.js 16, React 19, TypeScript, React-Konva |
+| Frontend | Next.js 16, React.js 19, TypeScript, React-Konva |
 | Real-Time | Socket.IO (client + server) |
 | Backend | Node.js, Express |
 | Database | MongoDB, Mongoose |
