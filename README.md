@@ -66,7 +66,7 @@ Board state is reconstructed by replaying the log from the beginning. This gives
 - Implemented as events in the log, not destructive state mutation
 
 ### Delete
-- **Eraser tool:** click a shape to delete it
+- **Eraser tool:** click a shape to delete it.
 - **Keyboard:** select shape(s) then press `Delete`
 - Deletions are persisted and broadcast to all room participants
 
