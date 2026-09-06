@@ -9,7 +9,10 @@ import {
   popRedo,
   popUndo,
   removeParticipant,
+  restoreSnapshot,
+  updateParticipant,
 } from '@/lib/room/roomManager';
+import { getVersion, listVersions, saveVersion } from '@/lib/db/versionManager';
 import { getPublisher, getSubscriber } from '@/lib/redis/client';
 import { CanvasOperation, Participant, Point } from '@/types';
 
@@ -49,6 +52,7 @@ export function initSocket(httpServer: HTTPServer): IOServer {
         color: user.color,
         isEditing: false,
         joinedAt: Date.now(),
+        lastActiveAt: Date.now(),
       };
 
       await addParticipant(roomId, participant);
@@ -91,6 +95,58 @@ export function initSocket(httpServer: HTTPServer): IOServer {
     // Cursor move (ephemeral -- no Redis state, just relayed via the adapter)
     socket.on('cursor:move', ({ roomId, userId, cursor }: { roomId: string; userId: string; cursor: Point }) => {
       socket.to(roomId).emit('participant:cursor', { userId, cursor });
+    });
+
+    // Editing state update -- persisted to Redis so late joiners see current state
+    socket.on('participant:update', async ({ roomId, userId, isEditing }: { roomId: string; userId: string; isEditing: boolean }) => {
+      const lastActiveAt = Date.now();
+      const updated = await updateParticipant(roomId, userId, { isEditing, lastActiveAt });
+      if (!updated) return;
+      socket.to(roomId).emit('participant:update', { userId, isEditing, lastActiveAt });
+    });
+
+    // Version history (Phase 6). Snapshots persist to MongoDB (separate from the Redis-backed
+    // undo/redo stacks, which are ephemeral and capped much lower) so they survive a Redis
+    // restart/flush. Restoring reuses the existing 'history:state' broadcast -- clients already
+    // know how to wholesale-replace their canvas state from a Phase 4 undo/redo, so a version
+    // restore is just that same replacement with a MongoDB-sourced snapshot instead of a popped
+    // Redis one, and (via restoreSnapshot) it's pushed onto the undo stack first so it's itself
+    // undoable with a normal Ctrl+Z.
+    socket.on('version:save', async ({ roomId, userId, label }) => {
+      try {
+        const objects = await getRoomObjects(roomId);
+        const version = await saveVersion(roomId, userId, label, objects);
+        io!.to(roomId).emit('version:saved', version);
+      } catch (err) {
+        console.error('[version:save] failed:', (err as Error).message);
+        socket.emit('error', 'Could not save version (MongoDB unavailable)');
+      }
+    });
+
+    socket.on('version:list', async ({ roomId }) => {
+      try {
+        const versions = await listVersions(roomId);
+        socket.emit('version:list', versions);
+      } catch (err) {
+        console.error('[version:list] failed:', (err as Error).message);
+        socket.emit('version:list', []);
+        socket.emit('error', 'Could not load versions (MongoDB unavailable)');
+      }
+    });
+
+    socket.on('version:restore', async ({ roomId, versionId }) => {
+      try {
+        const version = await getVersion(versionId);
+        if (!version) {
+          socket.emit('error', 'Version not found');
+          return;
+        }
+        await restoreSnapshot(roomId, version.snapshot);
+        io!.to(roomId).emit('history:state', { objects: version.snapshot });
+      } catch (err) {
+        console.error('[version:restore] failed:', (err as Error).message);
+        socket.emit('error', 'Could not restore version (MongoDB unavailable)');
+      }
     });
 
     // Leave room

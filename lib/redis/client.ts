@@ -23,6 +23,14 @@ declare module 'ioredis' {
       lastGroupKey: string,
       maxHistory: number
     ): Promise<string | null>;
+    restoreSnapshot(
+      objectsKey: string,
+      undoKey: string,
+      redoKey: string,
+      lastGroupKey: string,
+      maxHistory: number,
+      snapshotJson: string
+    ): Promise<number>;
   }
 }
 
@@ -117,6 +125,29 @@ end
 return popped
 `;
 
+// Restores a version snapshot (from MongoDB, via version:restore) as the room's live object
+// state. Pushes the room's *current* state onto the undo stack first (same shape as popHistory's
+// snapshot push) so restoring a version is itself undoable with a normal Ctrl+Z, clears redo
+// (a restore is a new commit, same semantics as any other edit), then replaces the objects hash
+// wholesale. One atomic script for the same reason as the two above: "read current, push, clear,
+// replace" is several logically-dependent steps against shared room state.
+// KEYS[1]=objects hash, KEYS[2]=undo list, KEYS[3]=redo list, KEYS[4]=lastGroupId key
+// ARGV[1]=max history length, ARGV[2]=snapshot JSON array to restore
+const RESTORE_SNAPSHOT_LUA = `
+local vals = redis.call('HVALS', KEYS[1])
+local current = '[' .. table.concat(vals, ',') .. ']'
+redis.call('RPUSH', KEYS[2], current)
+redis.call('LTRIM', KEYS[2], -tonumber(ARGV[1]), -1)
+redis.call('DEL', KEYS[3])
+redis.call('DEL', KEYS[4])
+redis.call('DEL', KEYS[1])
+local objs = cjson.decode(ARGV[2])
+for _, obj in ipairs(objs) do
+  redis.call('HSET', KEYS[1], obj.id, cjson.encode(obj))
+end
+return 1
+`;
+
 // Plain data client for room state (objects/participants), kept separate from the pub/sub
 // pair above since a subscribed connection can't run regular commands.
 export function getDataClient(): Redis {
@@ -125,6 +156,7 @@ export function getDataClient(): Redis {
     dataClient.on('error', (err) => console.error('[Redis Data]', err.message));
     dataClient.defineCommand('applyCanvasOp', { numberOfKeys: 4, lua: APPLY_CANVAS_OP_LUA });
     dataClient.defineCommand('popHistory', { numberOfKeys: 4, lua: POP_HISTORY_LUA });
+    dataClient.defineCommand('restoreSnapshot', { numberOfKeys: 4, lua: RESTORE_SNAPSHOT_LUA });
   }
   return dataClient;
 }

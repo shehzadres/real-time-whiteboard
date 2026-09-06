@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Dev-only plain-Node scripts (not part of the Next.js/TypeScript app code) -- e.g.
+    // scripts/test-phase6.js, a scripted Socket.io test run directly with `node`, not tsx/tsc.
+    "scripts/**",
   ]),
 ]);
 

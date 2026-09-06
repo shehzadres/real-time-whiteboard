@@ -108,9 +108,13 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const isErasing = useRef(false);
   const isMarqueeSelecting = useRef(false);
   const groupDragOrigin = useRef<{ id: string; positions: Map<string, { x: number; y: number }> } | null>(null);
+  const editingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isEditingRef = useRef(false);
 
   // --- Real-time collaboration state ---
   const socketRef = useRef<ReturnType<typeof connectSocket> | null>(null);
+  const currentRoomId = useRef<string>(roomId);
+  useEffect(() => { currentRoomId.current = roomId; }, [roomId]);
   const objectsRef = useRef<KonvaObjectData[]>([]);
   useEffect(() => { objectsRef.current = objects; }, [objects]);
 
@@ -185,6 +189,34 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     setObjects(newObjects);
   }, [broadcastDiff]);
 
+  // Broadcast editing state (with 2s idle timeout before reverting to false).
+  // Uses refs so it doesn't need to be in dependency arrays of mouse handlers.
+  const broadcastEditingState = useCallback((editing: boolean) => {
+    const socket = socketRef.current;
+    const rid = currentRoomId.current;
+    if (!socket || !rid) return;
+    if (editing === isEditingRef.current) {
+      // Still editing -- reset idle timer
+      if (editing && editingTimeoutRef.current) {
+        clearTimeout(editingTimeoutRef.current);
+        editingTimeoutRef.current = setTimeout(() => {
+          isEditingRef.current = false;
+          socket.emit('participant:update', { roomId: rid, userId: user.userId, isEditing: false });
+        }, 2000);
+      }
+      return;
+    }
+    isEditingRef.current = editing;
+    socket.emit('participant:update', { roomId: rid, userId: user.userId, isEditing: editing });
+    if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+    if (editing) {
+      editingTimeoutRef.current = setTimeout(() => {
+        isEditingRef.current = false;
+        socket.emit('participant:update', { roomId: rid, userId: user.userId, isEditing: false });
+      }, 2000);
+    }
+  }, [user.userId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const clearSelectionIfMissing = useCallback((newObjects: KonvaObjectData[]) => {
     setSelectedIds(ids => ids.filter(id => newObjects.some(o => o.id === id)));
   }, []);
@@ -240,6 +272,8 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const handleMouseDown = (e: KonvaType.KonvaEventObject<MouseEvent>) => {
     const stage = stageRef.current;
     if (!stage) return;
+
+    broadcastEditingState(true);
 
     if (tool === 'eraser') {
       isErasing.current = true;
@@ -655,6 +689,15 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       });
     };
 
+    const handleParticipantUpdate = ({ userId, isEditing, lastActiveAt }: { userId: string; isEditing: boolean; lastActiveAt: number }) => {
+      if (userId === user.userId) return;
+      setParticipants(prev => {
+        const next = prev.map(p => p.userId === userId ? { ...p, isEditing, lastActiveAt } : p);
+        onParticipantsChange(next);
+        return next;
+      });
+    };
+
     const handleDisconnect = () => setConnected(false);
 
     socket.on('connect', join);
@@ -664,11 +707,13 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     socket.on('participant:join', handleParticipantJoin);
     socket.on('participant:leave', handleParticipantLeave);
     socket.on('participant:cursor', handleCursor);
+    socket.on('participant:update', handleParticipantUpdate);
     socket.on('disconnect', handleDisconnect);
 
     if (socket.connected) join();
 
     return () => {
+      if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
       socket.emit('room:leave', roomId);
       socket.off('connect', join);
       socket.off('room:state', handleRoomState);
@@ -677,6 +722,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       socket.off('participant:join', handleParticipantJoin);
       socket.off('participant:leave', handleParticipantLeave);
       socket.off('participant:cursor', handleCursor);
+      socket.off('participant:update', handleParticipantUpdate);
       socket.off('disconnect', handleDisconnect);
     };
   }, [roomId, user, applyRemoteOperation, onParticipantsChange, clearSelectionIfMissing]);

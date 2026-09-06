@@ -1,0 +1,44 @@
+<svg viewBox="0 0 980 300" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', Inter, -apple-system, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0 0 L8 3 L0 6 Z" fill="#5b5b66"/>
+    </marker>
+  </defs>
+  <rect width="980" height="300" fill="#0e0e11" rx="12"/>
+
+  <g font-size="12" fill="#e4e4e7">
+    <!-- clients -->
+    <rect x="30" y="40" width="120" height="46" rx="8" fill="#161619" stroke="#2a2a33"/>
+    <text x="90" y="68" text-anchor="middle">Client A</text>
+    <rect x="30" y="200" width="120" height="46" rx="8" fill="#161619" stroke="#2a2a33"/>
+    <text x="90" y="228" text-anchor="middle">Client B</text>
+
+    <!-- socket servers -->
+    <rect x="260" y="30" width="150" height="60" rx="8" fill="#161619" stroke="#4f46e5"/>
+    <text x="335" y="55" text-anchor="middle">Next.js +</text>
+    <text x="335" y="72" text-anchor="middle">Socket.io (A)</text>
+    <rect x="260" y="200" width="150" height="60" rx="8" fill="#161619" stroke="#4f46e5"/>
+    <text x="335" y="225" text-anchor="middle">Next.js +</text>
+    <text x="335" y="242" text-anchor="middle">Socket.io (B)</text>
+
+    <!-- redis -->
+    <rect x="540" y="110" width="160" height="80" rx="8" fill="#161619" stroke="#22c55e"/>
+    <text x="620" y="138" text-anchor="middle">Redis</text>
+    <text x="620" y="155" text-anchor="middle" font-size="10" fill="#9a9aa5">Pub/Sub adapter</text>
+    <text x="620" y="170" text-anchor="middle" font-size="10" fill="#9a9aa5">Room state + history</text>
+
+    <!-- mongo -->
+    <rect x="780" y="110" width="160" height="80" rx="8" fill="#161619" stroke="#f59e0b"/>
+    <text x="860" y="138" text-anchor="middle">MongoDB</text>
+    <text x="860" y="155" text-anchor="middle" font-size="10" fill="#9a9aa5">Version snapshots</text>
+    <text x="860" y="170" text-anchor="middle" font-size="10" fill="#9a9aa5">(optional service)</text>
+  </g>
+
+  <g stroke="#5b5b66" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M150 63 L258 60"/>
+    <path d="M150 223 L258 230"/>
+    <path d="M410 65 C 470 80, 500 100, 538 130"/>
+    <path d="M410 225 C 470 210, 500 190, 538 165"/>
+    <path d="M700 140 L778 140"/>
+  </g>
+</svg>

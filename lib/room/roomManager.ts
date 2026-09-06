@@ -62,8 +62,27 @@ export async function popRedo(roomId: string): Promise<CanvasObject[] | null> {
   return popped ? (JSON.parse(popped) as CanvasObject[]) : null;
 }
 
+// Restores a saved version snapshot (from MongoDB) as the room's live object state -- pushes the
+// pre-restore state onto the undo stack and clears redo, atomically, via restoreSnapshot. See
+// restoreSnapshot's Lua definition in lib/redis/client.ts for why this is one script.
+export async function restoreSnapshot(roomId: string, objects: CanvasObject[]): Promise<void> {
+  await getDataClient().restoreSnapshot(
+    objectsKey(roomId), undoKey(roomId), redoKey(roomId), lastGroupKey(roomId),
+    MAX_HISTORY, JSON.stringify(objects)
+  );
+}
+
 export async function addParticipant(roomId: string, participant: Participant): Promise<void> {
   await getDataClient().hset(participantsKey(roomId), participant.userId, JSON.stringify(participant));
+}
+
+export async function updateParticipant(roomId: string, userId: string, patch: Partial<Participant>): Promise<Participant | null> {
+  const raw = await getDataClient().hget(participantsKey(roomId), userId);
+  if (!raw) return null;
+  const existing = JSON.parse(raw) as Participant;
+  const updated = { ...existing, ...patch };
+  await getDataClient().hset(participantsKey(roomId), userId, JSON.stringify(updated));
+  return updated;
 }
 
 export async function removeParticipant(roomId: string, userId: string): Promise<void> {

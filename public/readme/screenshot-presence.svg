@@ -1,0 +1,36 @@
+<svg viewBox="0 0 640 420" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', Inter, -apple-system, sans-serif">
+  <rect width="640" height="420" rx="14" fill="#0e0e11" stroke="#232329"/>
+  <rect x="424" y="20" width="196" height="220" rx="12" fill="#141417" stroke="#232329"/>
+  <text x="444" y="46" font-size="13" fill="#e4e4e7" font-weight="600">Participants · 3</text>
+  <line x1="444" y1="58" x2="600" y2="58" stroke="#232329"/>
+
+  <g font-size="12" fill="#e4e4e7">
+    <circle cx="456" cy="80" r="12" fill="#6366f1"/>
+    <text x="452" y="84" text-anchor="middle" fill="#0a0a0c" font-weight="700">Y</text>
+    <text x="478" y="84">You</text>
+    <circle cx="586" cy="80" r="4" fill="#22c55e"/>
+
+    <circle cx="456" cy="118" r="12" fill="#22c55e"/>
+    <text x="452" y="122" text-anchor="middle" fill="#062" font-weight="700">P</text>
+    <text x="478" y="122">Priya</text>
+    <text x="478" y="136" font-size="10" fill="#8b8b96">drawing…</text>
+    <circle cx="586" cy="118" r="4" fill="#22c55e"/>
+
+    <circle cx="456" cy="164" r="12" fill="#f59e0b"/>
+    <text x="452" y="168" text-anchor="middle" fill="#3a2400" font-weight="700">T</text>
+    <text x="478" y="168">Theo</text>
+    <text x="478" y="182" font-size="10" fill="#8b8b96">viewing</text>
+    <circle cx="586" cy="164" r="4" fill="#8b8b96"/>
+  </g>
+
+  <!-- canvas backdrop, dimmed, for context -->
+  <rect x="30" y="30" width="360" height="360" rx="10" fill="#141417" opacity="0.6"/>
+  <circle cx="150" cy="150" r="46" fill="none" stroke="#6366f1" stroke-width="3" opacity="0.7"/>
+  <rect x="220" y="220" width="120" height="80" rx="8" fill="none" stroke="#22c55e" stroke-width="3" opacity="0.7"/>
+
+  <g transform="translate(120,200)">
+    <path d="M0 0 L0 15 L4 11.5 L7 18 L9.5 17 L6.5 10.5 L11.5 10.5 Z" fill="#22c55e"/>
+    <rect x="12" y="1" width="50" height="18" rx="5" fill="#22c55e"/>
+    <text x="18" y="14" font-size="11" fill="#06210f" font-weight="600">Priya</text>
+  </g>
+</svg>

@@ -1,0 +1,73 @@
+<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', Inter, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0a0a0c"/>
+      <stop offset="0.55" stop-color="#111114"/>
+      <stop offset="1" stop-color="#151321"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.78" cy="0.22" r="0.65">
+      <stop offset="0" stop-color="#6366f1" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
+      <circle cx="1.4" cy="1.4" r="1.4" fill="#2a2a33"/>
+    </pattern>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="480" fill="url(#bg)"/>
+  <rect width="1200" height="480" fill="url(#glow)"/>
+
+  <!-- Left: wordmark + tagline -->
+  <text x="72" y="188" font-size="54" font-weight="700" fill="#f4f4f6" letter-spacing="-1">Whiteboard</text>
+  <text x="72" y="228" font-size="20" fill="#9a9aa5">Real-time collaborative canvas — draw, sync, and ship</text>
+  <text x="72" y="252" font-size="20" fill="#9a9aa5">together.</text>
+
+  <g fill="none" stroke="#3a3a44" stroke-width="1.2">
+    <line x1="72" y1="278" x2="420" y2="278"/>
+  </g>
+
+  <g font-size="15" fill="#8b8b96">
+    <circle cx="82" cy="312" r="4" fill="#6366f1"/>
+    <text x="96" y="317">Live multi-cursor drawing over Socket.io + Redis</text>
+    <circle cx="82" cy="342" r="4" fill="#22c55e"/>
+    <text x="96" y="347">Shared, server-authoritative undo/redo</text>
+    <circle cx="82" cy="372" r="4" fill="#f59e0b"/>
+    <text x="96" y="377">Version history you can save, browse, and replay</text>
+  </g>
+
+  <!-- Right: literal product — a shared canvas with two cursors and a rough-to-clean shape -->
+  <g filter="url(#soft)">
+    <rect x="650" y="90" width="500" height="320" rx="18" fill="#18181c" stroke="#2a2a33"/>
+    <rect x="650" y="90" width="500" height="320" rx="18" fill="url(#dots)"/>
+
+    <!-- toolbar sliver -->
+    <rect x="666" y="106" width="40" height="288" rx="10" fill="#141417" stroke="#26262e"/>
+    <circle cx="686" cy="130" r="9" fill="#26262e"/>
+    <rect x="678" y="152" width="16" height="16" rx="4" fill="#26262e"/>
+    <circle cx="686" cy="184" r="8" fill="#26262e"/>
+
+    <!-- clean shapes already on the canvas -->
+    <rect x="760" y="150" width="110" height="72" rx="10" fill="none" stroke="#6366f1" stroke-width="3"/>
+    <circle cx="1040" cy="320" r="42" fill="none" stroke="#22c55e" stroke-width="3"/>
+
+    <!-- rough freehand stroke morphing into a clean triangle (AI shape recognition nod) -->
+    <path d="M910 300 C 930 260, 955 340, 975 270 S 1010 260, 1000 300" fill="none" stroke="#6b6b76" stroke-width="2.5" stroke-linecap="round" opacity="0.85"/>
+    <path d="M1020 260 L1075 260 L1047 315 Z" fill="none" stroke="#f59e0b" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M985 285 q10 -6 18 0" fill="none" stroke="#f59e0b" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <!-- two live cursors -->
+    <g transform="translate(806,196)">
+      <path d="M0 0 L0 15 L4 11.5 L7 18 L9.5 17 L6.5 10.5 L11.5 10.5 Z" fill="#6366f1"/>
+      <rect x="12" y="1" width="52" height="18" rx="5" fill="#6366f1"/>
+      <text x="18" y="14" font-size="11" fill="#0a0a0c" font-weight="600">Maya</text>
+    </g>
+    <g transform="translate(1002,224)">
+      <path d="M0 0 L0 15 L4 11.5 L7 18 L9.5 17 L6.5 10.5 L11.5 10.5 Z" fill="#f59e0b"/>
+      <rect x="12" y="1" width="46" height="18" rx="5" fill="#f59e0b"/>
+      <text x="18" y="14" font-size="11" fill="#0a0a0c" font-weight="600">Theo</text>
+    </g>
+  </g>
+</svg>

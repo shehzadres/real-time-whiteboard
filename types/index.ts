@@ -44,6 +44,7 @@ export interface Participant {
   cursor?: Point;
   isEditing: boolean;
   joinedAt: number;
+  lastActiveAt: number;
 }
 
 export interface Room {
@@ -83,11 +84,13 @@ export interface ServerToClientEvents {
   'participant:join': (p: Participant) => void;
   'participant:leave': (userId: string) => void;
   'participant:cursor': (data: { userId: string; cursor: Point }) => void;
+  'participant:update': (data: { userId: string; isEditing: boolean; lastActiveAt: number }) => void;
   // Server-authoritative undo/redo result: replaces the room's full object
   // state on every client (including whoever requested the undo/redo), since
   // history is a single shared stack, not per-client.
   'history:state': (data: { objects: CanvasObject[] }) => void;
   'version:saved': (version: Version) => void;
+  'version:list': (versions: Version[]) => void;
   error: (msg: string) => void;
 }
 
@@ -96,8 +99,10 @@ export interface ClientToServerEvents {
   'room:leave': (roomId: string) => void;
   'canvas:operation': (op: CanvasOperation) => void;
   'cursor:move': (data: { roomId: string; userId: string; cursor: Point }) => void;
+  'participant:update': (data: { roomId: string; userId: string; isEditing: boolean }) => void;
   'history:undo': (data: { roomId: string; userId: string }) => void;
   'history:redo': (data: { roomId: string; userId: string }) => void;
   'version:save': (data: { roomId: string; userId: string; label: string }) => void;
   'version:restore': (data: { roomId: string; versionId: string; userId: string }) => void;
+  'version:list': (data: { roomId: string }) => void;
 }

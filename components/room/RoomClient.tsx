@@ -6,6 +6,7 @@ import { User, Participant, ToolType } from '@/types';
 import Toolbar from '@/components/toolbar/Toolbar';
 import Canvas from '@/components/canvas/Canvas';
 import PresencePanel from '@/components/presence/PresencePanel';
+import VersionHistoryPanel from '@/components/version/VersionHistoryPanel';
 
 interface Props {
   roomId: string;
@@ -19,6 +20,7 @@ export default function RoomClient({ roomId }: Props) {
   const [fillColor, setFillColor] = useState('transparent');
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [zoom, setZoom] = useState(1);
+  const [versionsOpen, setVersionsOpen] = useState(false);
   const canvasRef = useRef<{
     undo: () => void; redo: () => void; clear: () => void;
     duplicate: () => void; deleteSelected: () => void;
@@ -54,6 +56,7 @@ export default function RoomClient({ roomId }: Props) {
         onZoomOut={handleZoomOut}
         onZoomReset={handleZoomReset}
         zoom={zoom}
+        onOpenVersions={() => setVersionsOpen(true)}
       />
 
       {/* Canvas area */}
@@ -71,11 +74,18 @@ export default function RoomClient({ roomId }: Props) {
               Copy link
             </button>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs text-neutral-400">
-              {participants.length + 1} online
-            </span>
+          <div className="flex items-center gap-3">
+            {participants.some(p => p.isEditing) && (
+              <span className="text-xs text-indigo-400 font-medium">
+                {participants.filter(p => p.isEditing).length} editing
+              </span>
+            )}
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs text-neutral-400">
+                {participants.length + 1} online
+              </span>
+            </div>
           </div>
         </div>
 
@@ -95,6 +105,14 @@ export default function RoomClient({ roomId }: Props) {
 
       {/* Presence panel */}
       <PresencePanel user={user} participants={participants} roomId={roomId} />
+
+      {/* Version history drawer */}
+      <VersionHistoryPanel
+        roomId={roomId}
+        userId={user.userId}
+        isOpen={versionsOpen}
+        onClose={() => setVersionsOpen(false)}
+      />
     </div>
   );
 }
