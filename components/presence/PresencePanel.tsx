@@ -123,6 +123,10 @@ export default function PresencePanel({ user, participants, roomId }: Props) {
                   )}
                 </div>
               </div>
+              {/* In-call indicator */}
+              {p.inCall && (
+                <span className="text-[10px] flex-shrink-0" title="In video call">🎥</span>
+              )}
               {/* Color dot */}
               <div
                 className="w-1.5 h-1.5 rounded-full flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity"

@@ -7,6 +7,7 @@ import Toolbar from '@/components/toolbar/Toolbar';
 import Canvas from '@/components/canvas/Canvas';
 import PresencePanel from '@/components/presence/PresencePanel';
 import VersionHistoryPanel from '@/components/version/VersionHistoryPanel';
+import VideoOverlay from '@/components/video/VideoOverlay';
 
 interface Props {
   roomId: string;
@@ -21,6 +22,8 @@ export default function RoomClient({ roomId }: Props) {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [zoom, setZoom] = useState(1);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const [videoOpen, setVideoOpen] = useState(false);
+  const [aiRecognition, setAiRecognition] = useState(false);
   const canvasRef = useRef<{
     undo: () => void; redo: () => void; clear: () => void;
     duplicate: () => void; deleteSelected: () => void;
@@ -57,6 +60,9 @@ export default function RoomClient({ roomId }: Props) {
         onZoomReset={handleZoomReset}
         zoom={zoom}
         onOpenVersions={() => setVersionsOpen(true)}
+        onOpenVideo={() => setVideoOpen(true)}
+        aiRecognition={aiRecognition}
+        onToggleAiRecognition={() => setAiRecognition(v => !v)}
       />
 
       {/* Canvas area */}
@@ -100,6 +106,7 @@ export default function RoomClient({ roomId }: Props) {
           zoom={zoom}
           onZoomChange={setZoom}
           onParticipantsChange={setParticipants}
+          aiRecognition={aiRecognition}
         />
       </div>
 
@@ -112,6 +119,15 @@ export default function RoomClient({ roomId }: Props) {
         userId={user.userId}
         isOpen={versionsOpen}
         onClose={() => setVersionsOpen(false)}
+      />
+
+      {/* Video call overlay */}
+      <VideoOverlay
+        roomId={roomId}
+        userId={user.userId}
+        participants={participants}
+        isOpen={videoOpen}
+        onOpenChange={setVideoOpen}
       />
     </div>
   );

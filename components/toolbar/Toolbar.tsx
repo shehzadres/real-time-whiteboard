@@ -23,6 +23,9 @@ interface ToolbarProps {
   onZoomReset: () => void;
   zoom: number;
   onOpenVersions: () => void;
+  onOpenVideo: () => void;
+  aiRecognition: boolean;
+  onToggleAiRecognition: () => void;
 }
 
 const TOOLS: { id: ToolType; label: string; icon: string }[] = [
@@ -49,6 +52,9 @@ export default function Toolbar({
   onZoomIn, onZoomOut, onZoomReset,
   zoom,
   onOpenVersions,
+  onOpenVideo,
+  aiRecognition,
+  onToggleAiRecognition,
 }: ToolbarProps) {
   return (
     <aside className="w-14 flex flex-col items-center gap-1 bg-neutral-900 border-r border-neutral-800 py-3 overflow-y-auto flex-shrink-0">
@@ -69,6 +75,26 @@ export default function Toolbar({
           </button>
         ))}
       </div>
+
+      <div className="w-8 border-t border-neutral-800 my-1" />
+
+      {/* AI shape recognition toggle -- snaps a finished pen stroke to a clean
+          shape (circle/rectangle/triangle/arrow) when it confidently matches
+          one. Off by default; lives near the Pen tool since it only affects
+          pen strokes. */}
+      <button
+        title={aiRecognition
+          ? 'AI shape recognition: on — rough pen strokes snap to clean shapes'
+          : 'AI shape recognition: off — pen strokes stay freehand'}
+        onClick={onToggleAiRecognition}
+        className={`w-full aspect-square flex items-center justify-center rounded-md text-sm transition-colors
+          ${aiRecognition
+            ? 'bg-indigo-600 text-white'
+            : 'text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
+          }`}
+      >
+        ✨
+      </button>
 
       <div className="w-8 border-t border-neutral-800 my-1" />
 
@@ -210,6 +236,13 @@ export default function Toolbar({
           className="w-full aspect-square flex items-center justify-center rounded-md text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition-colors"
         >
           🕐
+        </button>
+        <button
+          title="Video call"
+          onClick={onOpenVideo}
+          className="w-full aspect-square flex items-center justify-center rounded-md text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition-colors"
+        >
+          🎥
         </button>
       </div>
     </aside>

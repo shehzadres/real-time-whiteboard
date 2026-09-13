@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import jsPDF from 'jspdf';
 import { ToolType, Participant, User, CanvasObject, CanvasOperation, Point } from '@/types';
 import { connectSocket } from '@/lib/socket/client';
+import { recognizeShape } from '@/lib/canvas/shapeRecognizer';
 
 interface Props {
   roomId: string;
@@ -20,6 +21,11 @@ interface Props {
   zoom: number;
   onZoomChange: (z: number) => void;
   onParticipantsChange: (ps: Participant[]) => void;
+  // Phase 8: when true, a finished pen stroke that confidently matches a
+  // known shape is substituted with the clean shape before it's committed
+  // and broadcast. Off by default so users who want genuine freehand strokes
+  // aren't surprised by auto-snapping.
+  aiRecognition: boolean;
 }
 
 export interface CanvasHandle {
@@ -87,7 +93,7 @@ function diffObjects(prev: KonvaObjectData[], next: KonvaObjectData[]) {
 }
 
 const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
-  { roomId, user, tool, strokeColor, strokeWidth, fillColor, zoom, onZoomChange, onParticipantsChange },
+  { roomId, user, tool, strokeColor, strokeWidth, fillColor, zoom, onZoomChange, onParticipantsChange, aiRecognition },
   ref
 ) {
   const stageRef = useRef<KonvaType.Stage>(null);
@@ -488,10 +494,24 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     })();
 
     if (isValid) {
-      const newObjects = [...objects, currentObj];
+      const objToCommit = maybeRecognizeShape(currentObj);
+      const newObjects = [...objects, objToCommit];
       commitAndSync(newObjects);
     }
     setCurrentObj(null);
+  };
+
+  // Phase 8: if AI recognition is on and this was a pen stroke, try to snap it
+  // to a clean shape. Runs once, at commit time (not live during the stroke),
+  // and only ever returns a *different* object -- the raw pen object is
+  // returned unchanged whenever the classifier isn't confident, so there's no
+  // risk of silently discarding a genuine freehand drawing.
+  const maybeRecognizeShape = (obj: KonvaObjectData): KonvaObjectData => {
+    if (!aiRecognition || obj.type !== 'pen' || !obj.points) return obj;
+    const recognized = recognizeShape(obj.points);
+    if (!recognized) return obj;
+    const { id, stroke, strokeWidth: sw, fill } = obj;
+    return { id, stroke, strokeWidth: sw, fill, ...recognized };
   };
 
   const handleWheel = (e: KonvaType.KonvaEventObject<WheelEvent>) => {
@@ -689,10 +709,20 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       });
     };
 
-    const handleParticipantUpdate = ({ userId, isEditing, lastActiveAt }: { userId: string; isEditing: boolean; lastActiveAt: number }) => {
+    // isEditing/inCall are each optional on the wire -- a given broadcast may only be patching
+    // one of the two (e.g. joining a video call doesn't touch isEditing), so only overwrite the
+    // fields actually present rather than clobbering the other with undefined.
+    const handleParticipantUpdate = ({ userId, isEditing, inCall, lastActiveAt }: { userId: string; isEditing?: boolean; inCall?: boolean; lastActiveAt: number }) => {
       if (userId === user.userId) return;
       setParticipants(prev => {
-        const next = prev.map(p => p.userId === userId ? { ...p, isEditing, lastActiveAt } : p);
+        const next = prev.map(p => p.userId === userId
+          ? {
+              ...p,
+              lastActiveAt,
+              ...(isEditing !== undefined ? { isEditing } : {}),
+              ...(inCall !== undefined ? { inCall } : {}),
+            }
+          : p);
         onParticipantsChange(next);
         return next;
       });

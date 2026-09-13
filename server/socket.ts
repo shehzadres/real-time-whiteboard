@@ -97,12 +97,27 @@ export function initSocket(httpServer: HTTPServer): IOServer {
       socket.to(roomId).emit('participant:cursor', { userId, cursor });
     });
 
-    // Editing state update -- persisted to Redis so late joiners see current state
-    socket.on('participant:update', async ({ roomId, userId, isEditing }: { roomId: string; userId: string; isEditing: boolean }) => {
+    // Editing/in-call state update -- persisted to Redis so late joiners see current state.
+    // Only the fields actually provided are patched (e.g. toggling video call membership
+    // doesn't overwrite isEditing, and vice versa).
+    socket.on('participant:update', async ({ roomId, userId, isEditing, inCall }: { roomId: string; userId: string; isEditing?: boolean; inCall?: boolean }) => {
       const lastActiveAt = Date.now();
-      const updated = await updateParticipant(roomId, userId, { isEditing, lastActiveAt });
+      const patch: { isEditing?: boolean; inCall?: boolean; lastActiveAt: number } = { lastActiveAt };
+      if (isEditing !== undefined) patch.isEditing = isEditing;
+      if (inCall !== undefined) patch.inCall = inCall;
+      const updated = await updateParticipant(roomId, userId, patch);
       if (!updated) return;
-      socket.to(roomId).emit('participant:update', { userId, isEditing, lastActiveAt });
+      socket.to(roomId).emit('participant:update', { userId, isEditing, inCall, lastActiveAt });
+    });
+
+    // WebRTC signaling (Phase 7) -- pure relay, no room state involved, same treatment as
+    // cursor:move. Broadcast to the whole room (not a targeted socket id, since we don't track
+    // per-user socket ids); each client ignores signals whose `to` isn't its own userId. Mesh
+    // topology means N participants produce N-1 direct peer connections each, which is fine at
+    // the small room sizes this project targets (an SFU would be needed for large calls, but
+    // that's a paid/self-hosted media server this project deliberately avoids).
+    socket.on('webrtc:signal', ({ roomId, from, to, signal }) => {
+      socket.to(roomId).emit('webrtc:signal', { from, to, signal });
     });
 
     // Version history (Phase 6). Snapshots persist to MongoDB (separate from the Redis-backed
