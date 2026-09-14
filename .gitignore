@@ -6,6 +6,8 @@
 /out/
 next-env.d.ts
 tsconfig.tsbuildinfo
+*.tsbuildinfo
+.vercel
 
 # Env files (never commit real credentials)
 .env

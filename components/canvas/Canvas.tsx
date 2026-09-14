@@ -221,7 +221,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         socket.emit('participant:update', { roomId: rid, userId: user.userId, isEditing: false });
       }, 2000);
     }
-  }, [user.userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user.userId]);
 
   const clearSelectionIfMissing = useCallback((newObjects: KonvaObjectData[]) => {
     setSelectedIds(ids => ids.filter(id => newObjects.some(o => o.id === id)));

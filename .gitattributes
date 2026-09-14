@@ -1,0 +1,11 @@
+# Normalize line endings to LF for everyone, regardless of OS/editor.
+* text=auto eol=lf
+
+# Diff binary-ish/minified files as binary instead of trying to line-diff them.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
