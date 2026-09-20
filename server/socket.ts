@@ -35,9 +35,18 @@ let io: IOServer | null = null;
 export function initSocket(httpServer: HTTPServer): IOServer {
   if (io) return io;
 
+  // CORS: allow the Next.js frontend origin(s). In production the frontend is deployed to
+  // Vercel (FRONTEND_URL) and is separate from this Socket.io server (Railway). Both envs
+  // are accepted so local dev (NEXT_PUBLIC_APP_URL) keeps working unchanged.
+  const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    'http://localhost:3000',
+  ].filter(Boolean) as string[];
+
   io = new IOServer(httpServer, {
     cors: {
-      origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+      origin: allowedOrigins,
       methods: ['GET', 'POST'],
     },
     transports: ['websocket', 'polling'],

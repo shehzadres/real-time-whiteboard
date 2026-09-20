@@ -17,7 +17,9 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data:",
-      "connect-src 'self' ws: wss:",
+      // Allow WebSocket connections to the Railway-hosted Socket.io server in production.
+      // NEXT_PUBLIC_SOCKET_URL is set on Vercel at build time; falls back to 'self' for local dev.
+      `connect-src 'self' ws: wss: ${process.env.NEXT_PUBLIC_SOCKET_URL || ''}`.trim(),
       "media-src 'self' blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
