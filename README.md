@@ -1,12 +1,8 @@
 <div align="center">
 
-<img src="public/readme/hero-banner.svg" alt="Real-Time Collaborative Whiteboard" width="100%" />
-
 # 🎨 Real-Time Collaborative Whiteboard
 
-**A production-grade, multiplayer whiteboard — draw, sync, call, and version your canvas in real time.**
-
-Built with Next.js 16, Konva.js, Socket.io, Redis, and MongoDB.
+<img src="public/readme/hero-banner.svg" alt="Real-Time Collaborative Whiteboard" width="100%" />
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.3-black?logo=next.js&logoColor=white)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -15,6 +11,10 @@ Built with Next.js 16, Konva.js, Socket.io, Redis, and MongoDB.
 [![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
 [![WebRTC](https://img.shields.io/badge/WebRTC-Mesh_Video-333333?logo=webrtc&logoColor=white)](https://webrtc.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+**A production-grade, multiplayer whiteboard — draw, sync, call, and version your canvas in real time.**
+
+Built with Next.js 16, Konva.js, Socket.io, Redis, and MongoDB.
 
 [Features](#-features) · [Screenshots](#-screenshots) · [Architecture](#-architecture) · [Getting Started](#-getting-started) · [Known Limitations](#-known-limitations) · [Roadmap](#-phase-roadmap)
 
