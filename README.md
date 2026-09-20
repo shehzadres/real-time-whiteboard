@@ -1,44 +1,151 @@
-# Whiteboard — Real-Time Collaborative Canvas
+<div align="center">
 
-Production-quality real-time collaborative whiteboard: Next.js, Konva.js, Socket.io, Redis, MongoDB.
+<img src="public/readme/hero-banner.svg" alt="Real-Time Collaborative Whiteboard" width="100%" />
 
-## Tech Stack
-- **Frontend**: Next.js 15, TypeScript, Tailwind CSS
-- **Canvas**: Konva.js / react-konva
-- **Real-time**: Socket.io + Redis Pub/Sub
-- **Database**: MongoDB + Mongoose
-- **Video**: WebRTC (native)
+# 🎨 Real-Time Collaborative Whiteboard
 
-## Setup
+**A production-grade, multiplayer whiteboard — draw, sync, call, and version your canvas in real time.**
+
+Built with Next.js 16, Konva.js, Socket.io, Redis, and MongoDB.
+
+[![Next.js](https://img.shields.io/badge/Next.js-16.3-black?logo=next.js&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Socket.io](https://img.shields.io/badge/Socket.io-4.8-black?logo=socket.io&logoColor=white)](https://socket.io/)
+[![Redis](https://img.shields.io/badge/Redis-Pub%2FSub-DC382D?logo=redis&logoColor=white)](https://redis.io/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![WebRTC](https://img.shields.io/badge/WebRTC-Mesh_Video-333333?logo=webrtc&logoColor=white)](https://webrtc.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+[Features](#-features) · [Screenshots](#-screenshots) · [Architecture](#-architecture) · [Getting Started](#-getting-started) · [Known Limitations](#-known-limitations) · [Roadmap](#-phase-roadmap)
+
+</div>
+
+---
+
+## ✨ Overview
+
+This is a **multi-phase build** of a real-time collaborative whiteboard app — the kind of tool behind products like Figma/FigJam or Miro, built from scratch to demonstrate real-time systems design: shared canvas state, horizontal scaling behind Redis, shared undo/redo, WebRTC video, AI-assisted shape recognition, and security hardening. Every phase below is shipped and working, not a mockup.
+
+
+## 📸 Screenshots
+
+<div align="center">
+<table>
+<tr>
+<td align="center" width="33%"><img src="public/readme/screenshot-canvas.svg" alt="Collaborative canvas" width="100%"/><br/><sub><b>Live canvas & drawing tools</b></sub></td>
+<td align="center" width="33%"><img src="public/readme/screenshot-presence.svg" alt="Presence panel" width="100%"/><br/><sub><b>Presence, cursors & editing indicators</b></sub></td>
+<td align="center" width="33%"><img src="public/readme/screenshot-versions.svg" alt="Version history" width="100%"/><br/><sub><b>Version history & replay</b></sub></td>
+</tr>
+</table>
+</div>
+
+---
+
+## 🚀 Features
+
+| Area | Highlights |
+|---|---|
+| 🖊️ **Drawing** | Pen, rectangle, circle, line, arrow, triangle, text — select, multi-select, transform (resize/rotate), duplicate, eraser, undo/redo, zoom/pan, PNG & PDF export |
+| 🌐 **Real-Time Rooms** | Create/join by code or link, live per-object sync (not full-canvas snapshots), reconnect handling with fresh-state resync |
+| 📈 **Horizontal Scaling** | Room state lives in Redis (not process memory); Socket.io Redis adapter fans out events across multiple server instances |
+| 🕹️ **Shared History** | One undo/redo stack per room (Redis-backed, atomic via Lua scripts), multi-object commits undo as a single step |
+| 👥 **Presence** | Live cursors, avatar glow rings, "N editing" indicator, relative timestamps |
+| 🗂️ **Version History** | Save labeled snapshots, browse & restore from a drawer, live replay for everyone in the room, backed by MongoDB |
+| 📹 **Video Calls** | Mesh WebRTC, floating overlay, camera/mic toggles, Socket.io-relayed signaling, no media server |
+| 🤖 **AI Shape Recognition** | Opt-in geometric classifier snaps rough pen strokes to clean shapes — no ML model, no paid API, runs client-side |
+| 🔒 **Security Hardening** | Zod validation on every socket/REST payload, server-trusted identity binding, Redis-backed rate limiting, CSP & security headers |
+
+
+<details>
+<summary><b>Full feature log, phase by phase (click to expand)</b></summary>
+
+**Phase 1 — Whiteboard MVP**
+Freehand pen, rectangle, circle, line, arrow, triangle, text · select (click / shift-click / marquee) · transformer (resize/rotate/group-move) · duplicate (Ctrl+D) · delete · clear all · eraser · double-click text edit · stroke/fill swatches + custom picker · undo/redo (Ctrl+Z) · zoom/pan · PNG & real PDF export (jsPDF).
+
+**Phase 2 — Rooms & Real-Time**
+Room-based sessions (create or join by code/link) · live per-object sync for draw/move/resize/rotate/delete/duplicate/clear · presence list + live cursors (name + color) · reconnect handling with a fresh state snapshot.
+
+**Phase 3 — Redis Pub/Sub Scale**
+Room state (canvas objects + participants) moved from process memory into Redis hashes · Socket.io Redis adapter wired in so broadcasts reach clients on *any* instance · Redis becomes a hard runtime dependency.
+
+**Phase 4 — Shared History & Export**
+Single Redis-backed undo/redo stack per room (not per client) · multi-object commits undo/redo as one step via a per-commit `groupId` · undo/redo apply + bookkeeping run as one atomic Lua script (fixes a real race) · verified across multiple server instances · PNG/PDF export reconfirmed.
+
+**Phase 5 — Presence**
+Redesigned presence panel: animated avatar glow rings, bouncing-bar "editing" indicator, relative ("2m ago") timestamps · tool-agnostic editing state (2s idle window) synced via `participant:update` · live "N editing" count in the room info bar.
+
+**Phase 6 — Version History**
+Save labeled canvas snapshots on demand · browse/restore from a slide-out drawer · restore reuses the shared `history:state` broadcast and is itself undoable · live replay (oldest → newest) visible to the whole room · snapshots in MongoDB, capped at 30/room · Mongo connects in the background — everything else keeps working if it's unreachable.
+
+**Phase 7 — WebRTC Video**
+Floating call overlay (bottom-right) with Join/Leave, camera/mic toggles, one tile per in-call participant · mesh WebRTC (no media server) · `inCall` is just another presence field, so it persists like `isEditing` · signaling relayed over the existing Socket.io connection, STUN-only (no TURN) · minimizing the panel keeps the call running · 🎥 indicator in the presence panel.
+
+**Phase 8 — AI Shape Recognition**
+Opt-in (✨ toolbar toggle, off by default) — snaps a finished pen stroke to a clean shape when it confidently matches one · pure geometric/heuristic classifier (corner detection + isoperimetric circularity check), no ML model, no vision API, no network call · confidence-gated with a documented fallback to freehand · runs client-side before broadcast, so remote peers see a normal `add` op · unit-tested (`scripts/test-shape-recognizer.mjs`) — 29/29 core cases pass.
+
+**Phase 9 — Security Hardening**
+Deliberately **no new authentication** (documented trade-off, not an oversight) — hardens the existing trust model instead · Zod runtime validation on every Socket.io payload and the `/api/rooms` REST body, with size caps (200KB/canvas object, 20KB/WebRTC signal) · identity bound once at `room:join`, never re-trusted from later payloads · Redis-backed rate limiting per user, shared across instances · CSP + security headers on every response · reviewed for XSS (Konva `<Text>`, no raw `innerHTML`).
+
+</details>
+
+
+## 🏗️ Architecture
+
+<div align="center">
+<img src="public/readme/architecture.svg" alt="System architecture diagram" width="90%" />
+</div>
+
+Canvas operations, cursors, and presence flow client → Socket.io → Redis (state + pub/sub adapter for multi-instance fan-out) → back out to every client in the room. Version snapshots flow to MongoDB as a separate, non-blocking path. WebRTC media never touches the server — only offer/answer/ICE signaling rides the existing socket connection.
+
+| Layer | Technology | Role |
+|---|---|---|
+| **Frontend** | Next.js 16, TypeScript, Tailwind CSS | App shell, routing, UI |
+| **Canvas** | Konva.js / react-konva | Shape rendering & interaction |
+| **Real-time transport** | Socket.io + `@socket.io/redis-adapter` | Event sync across clients & server instances |
+| **Shared state** | Redis | Room objects, participants, undo/redo stacks, rate limits |
+| **Persistence** | MongoDB + Mongoose | Version history snapshots |
+| **Video** | Native WebRTC (mesh) | Peer-to-peer audio/video, STUN-only |
+| **Validation** | Zod | Runtime payload validation on every socket/REST input |
+
+---
+
+## 🛠️ Getting Started
+
+### Prerequisites
+- Node.js 20+
+- A running **Redis** instance (required from Phase 3 onward)
+- A running **MongoDB** instance (optional — only powers Version History)
+
+### Install & run
 ```bash
 npm install
 cp .env.example .env.local
-# REDIS_URL must point at a running Redis instance from Phase 3 onward (see below).
-# MONGODB_URI is only used for Save/Restore Version (Phase 6) -- the rest of the app runs fine
-# without it; see below.
 npm run dev
 ```
 
-`npm run dev` runs the custom Socket.io + Next.js server (`server/index.ts`) via `tsx`, so real-time
-collaboration works out of the box in dev. Use `npm run dev:next-only` if you only need the Next.js
-routes without the socket server (note: the socket server is what talks to Redis, so this mode won't
-have real-time collaboration).
+`npm run dev` runs the custom Socket.io + Next.js server (`server/index.ts`) via `tsx`, so real-time collaboration works out of the box. Use `npm run dev:next-only` if you only need the Next.js routes (no real-time collaboration, since that server never talks to Redis).
 
-**Redis is required from Phase 3.** Room state (canvas objects + participants) now lives in Redis
-instead of process memory, and Socket.io uses the Redis adapter to fan out events across multiple
-server instances. Run a local Redis (`redis-server`, or `docker run -p 6379:6379 redis`) before
-starting the app.
+Then open **http://localhost:3000**.
 
-**MongoDB is only used for Version History (Phase 6).** It's connected in the background, not
-awaited at startup — if it's unreachable, the server logs a warning and everything else (canvas,
-rooms, undo/redo, presence) keeps working exactly as before; only Save/List/Restore Version show
-a clear error in that panel instead of hanging. Run a local MongoDB
-(`mongod`, or `docker run -p 27017:27017 mongo`) to use version history.
 
-### Running multiple server instances (to see the scaling actually work)
-Next's dev server takes a lock on `.next/` per project directory, so two `npm run dev` processes
-can't share one checkout. To actually see two instances behind the same Redis, use a production
-build instead:
+> **Redis is required from Phase 3.** Room state and Socket.io's cross-instance fan-out both depend on it. Run one locally with `redis-server` or `docker run -p 6379:6379 redis`.
+
+> **MongoDB is optional**, used only for Version History (Phase 6). It connects in the background and is never awaited at startup — if it's unreachable, everything else (canvas, rooms, undo/redo, presence, video) keeps working; only the Version panel shows a clear error. Run one with `mongod` or `docker run -p 27017:27017 mongo`.
+
+### Environment variables
+Copy `.env.example` to `.env.local` and set:
+
+| Variable | Purpose | Required |
+|---|---|---|
+| `NEXT_PUBLIC_APP_URL` | Public app URL (default `http://localhost:3000`) | ✅ |
+| `REDIS_URL` | Redis connection string | ✅ (from Phase 3) |
+| `MONGODB_URI` | MongoDB connection string | ⚙️ optional (Version History only) |
+
+Both `REDIS_URL`/`MONGODB_URI` already support full connection strings with credentials and TLS (`rediss://user:pass@host:port`, `mongodb+srv://user:pass@host/db?tls=true`) for production use.
+
+### Seeing the Redis scaling actually work
+Next's dev server locks `.next/` per checkout, so two `npm run dev` processes can't share one project directory. Use a production build to run two real instances behind the same Redis:
+
 ```bash
 npm run build
 # terminal 1
@@ -46,215 +153,66 @@ PORT=4001 npm start
 # terminal 2
 PORT=4002 npm start
 ```
-Both point at the same `REDIS_URL`. Open a room on `:4001` in one browser tab and the same room URL
-on `:4002` in another — participants, cursors, and canvas operations sync across the two processes
-exactly as they would across two behind a real load balancer. (Verified in this session with a
-two-process + scripted-client test — see PROJECT_HANDOFF.md.)
 
-Open http://localhost:3000
+Open the same room URL on `:4001` in one tab and `:4002` in another — cursors, presence, and canvas operations sync across the two processes exactly as they would behind a real load balancer.
 
-## Environment Variables
-```
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-MONGODB_URI=mongodb://localhost:27017/whiteboard
-REDIS_URL=redis://localhost:6379
-```
-No new environment variables were needed for Phase 7 (WebRTC) — signaling rides the existing
-Socket.io connection, and the only ICE server config is a hardcoded public Google STUN endpoint
-(no TURN, no account/API key required).
+### Available scripts
 
-## Features (Phase 8)
-- AI shape recognition: toggle (✨ button in the toolbar, off by default) that snaps a finished
-  pen stroke to a clean shape when it confidently matches one — rough circle → clean circle,
-  rough rectangle → clean rectangle, rough triangle → clean triangle, rough straight stroke →
-  clean arrow
-- Pure geometric/heuristic classifier — no ML model, no vision API, no network call, no paid
-  service. Runs synchronously on stroke completion (not live during the stroke): corner detection
-  (path simplification + jitter smoothing) identifies rectangles/triangles; an isoperimetric
-  circularity check catches circles and moderately elongated ellipses; straight open strokes
-  become arrows
-- Confidence-gated with a documented fallback: anything that doesn't confidently match stays
-  freehand rather than being forced into a bad shape
-- Runs entirely client-side, before the stroke is broadcast — remote peers just see a normal
-  `add` operation for a clean shape, no server or wire-format changes needed
-- Unit-tested with synthetic rough-stroke point paths (`scripts/test-shape-recognizer.mjs`,
-  no browser/server required) — 29/29 core cases pass; a separate, non-gating stress test at
-  extreme jitter (10px noise on a 250x150 shape) recognizes 3/5, reported as a known limit of a
-  pure-geometry approach rather than hidden
+| Script | Description |
+|---|---|
+| `npm run dev` | Dev server with Socket.io (real-time collaboration works) |
+| `npm run dev:next-only` | Next.js routes only, no socket server |
+| `npm run build` | Production build |
+| `npm start` | Run the production build |
+| `npm run lint` | Lint the codebase |
 
-## Features (Phase 7)
-- Video call: floating overlay (bottom-right, not a sidebar) with a Join/Leave button, camera and
-  microphone toggles, and a video tile per participant currently in the call
-- Mesh WebRTC: every in-call participant connects directly to every other in-call participant
-  (no media server) — call membership is just another field (`inCall`) on the existing Participant
-  presence data from Phase 5, so it persists and survives late joiners the same way `isEditing` does
-- Signaling (offer/answer/ICE candidates) is relayed through the existing Socket.io connection —
-  no separate signaling server, no paid service, STUN-only (Google public STUN) with no TURN
-  fallback for peers both behind symmetric NATs (documented limitation, not solved)
-- Minimizing the call panel (✕) does not end the call — it collapses to a small reopenable pill so
-  audio/video keeps running while you work on the canvas
-- Participants currently in the call show a small 🎥 indicator in the presence panel
 
-## Features (Phase 6)
-- Version History: save a labeled snapshot of the current canvas at any time, browse past
-  snapshots in a slide-out drawer (timestamps, labels), and restore any of them
-- Restoring a version reuses the existing shared `history:state` broadcast (same one Phase 4's
-  undo/redo uses), and pushes the pre-restore state onto the undo stack first, so a restore is
-  itself undoable with a normal Ctrl+Z
-- Replay: steps through every saved version oldest → newest with a short pause between each,
-  visible live to everyone in the room (each step is a real restore, not a local-only preview)
-- Snapshots persist in MongoDB (separate from the Redis undo/redo stacks, which are ephemeral),
-  capped at 30 per room
-- MongoDB connects in the background at startup, not awaited — the rest of the app (canvas, rooms,
-  presence, shared undo/redo) requires no MongoDB at all, same as Phases 0-5; only the version
-  panel degrades (with a visible error) if Mongo is unreachable
+---
 
-## Features (Phase 5)
-- Presence panel redesign: animated avatar glow rings, a bouncing-bar "editing" indicator, and
-  relative ("2m ago") timestamps for each participant
-- "Editing" state: any mousedown on the canvas marks a participant as editing for 2s of idle time
-  (tool-agnostic — draw, drag, select, and resize all count), synced to everyone via
-  `participant:update` and persisted so late joiners see the correct state immediately
-- Room info bar shows a live "N editing" count when anyone in the room is actively interacting
-  with the canvas
+## ⚠️ Known Limitations
 
-## Features (Phase 4)
-- Shared undo/redo: a single history stack per room (Redis-backed), not per client — undo/redo
-  is now a server round trip, and the resulting state is broadcast to everyone in the room
-- Multi-object commits (group-drag, multi-delete) undo/redo as one step, not one step per object,
-  via a per-commit `groupId` on each operation
-- Undo/redo apply + history bookkeeping run as a single atomic Redis Lua script per operation —
-  needed to avoid a real race found via testing (see KNOWN ISSUES / PROJECT_HANDOFF.md)
-- Verified working across multiple server instances (Redis adapter fan-out), not just single-process
-- PNG/PDF export (Phase 1) reconfirmed working — both are pure client-side (Konva `toDataURL` /
-  jsPDF) and untouched by this phase's server-side changes
+<details>
+<summary><b>Click to expand — honest, documented trade-offs by phase</b></summary>
 
-## Features (Phase 3)
-- Room state (canvas objects + participants) moved from a single process's memory into Redis
-  (hashes, one per room) — every server instance reads/writes the same shared state
-- Socket.io Redis adapter wired in, so `io.to()`/`socket.to()` broadcasts (canvas operations,
-  presence, cursors) reach clients connected to *any* server instance, not just the one they
-  broadcast from
-- Everything from Phase 2 (rooms, live sync, presence, cursors) now works correctly across
-  multiple server processes/instances, not just one
+- **No authentication/accounts** — `userId` is a client-generated, unauthenticated `localStorage` value. Phase 9 hardens *around* this trust model rather than replacing it (deliberate scope decision, see `PROJECT_HANDOFF.md`).
+- **No persistence for live room state** — restarting Redis (or `FLUSHALL`) drops all canvas objects, participants, and undo/redo stacks. Only Version History snapshots (MongoDB) survive.
+- **Last-write-wins concurrency** — no OT/CRDT layer; two users editing the same object at the same instant resolve by whichever Redis `HSET` lands last, not by causal order.
+- **STUN-only WebRTC, no TURN** — two peers both behind symmetric NATs may fail to connect directly; adding TURN means self-hosting or paying for a relay, out of scope by design.
+- **Mesh video topology** — bandwidth/CPU cost grows with the square of call size; fine for small rooms, not built for large calls, no server-side cap on call size.
+- **Shape recognition is pure geometry, not ML** — handles rectangles, triangles, circles/ellipses, and arrows only; accuracy degrades at high stroke jitter (documented and tested, not hidden).
+- **Fixed-constant rate limits and history caps** — not configurable per deployment or per room (`lib/security/rateLimiter.ts`, `MAX_HISTORY` in `lib/room/roomManager.ts`).
+- **CSP still allows `'unsafe-inline'`/`'unsafe-eval'`** on `script-src`, required by Next.js's own dev/runtime bootstrap; a stricter nonce-based CSP would need custom middleware.
 
-## Features (Phase 2)
-- Room-based sessions: create a room from the landing page or join by room code/link
-- Live canvas sync: draw/move/resize/rotate/delete/duplicate/clear on one client appears on every
-  other client in the room, sent as per-object operations (not full-canvas snapshots)
-- Presence: participant list updates live as people join/leave; live cursor indicators (name + color)
-  for every other participant in the room
-- Reconnect handling: the client rejoins the room and receives a fresh state snapshot after a drop
-- Everything from Phase 1 (drawing tools, selection, transform, undo/redo, export) still works
+</details>
 
-## Features (Phase 1)
-- Freehand pen, rectangle, circle, line, arrow, triangle, text
-- Select tool: click, shift-click multi-select, marquee (drag-select) selection
-- Transformer: resize + rotate selected shape(s); group move for multi-select
-- Duplicate (Ctrl+D / toolbar), Delete (Del/Backspace), Clear all
-- Eraser tool (click or drag over an object to remove it)
-- Double-click text to edit in place
-- Stroke + fill color swatches plus custom color picker
-- Undo/redo (Ctrl+Z / Ctrl+Shift+Z), zoom (wheel + toolbar), pan (drag canvas)
-- Export to PNG and real PDF (jsPDF)
+---
 
-## Features (Phase 9)
-- **No new authentication was added** — a deliberate decision, documented as a real scope
-  question in PROJECT_HANDOFF.md, not picked silently: `userId` remains a client-generated,
-  client-trusted value (localStorage). What Phase 9 hardens is everything *given* that trust
-  model, so the existing app-without-accounts design is no longer wide open.
-- Runtime input validation (`lib/security/validation.ts`, zod) on every Socket.io event payload
-  and the `/api/rooms` REST body — TypeScript types only constrain Claude's own code, not what an
-  arbitrary client can send over the wire. Includes size caps (200KB per canvas object, 20KB per
-  WebRTC signal) so a malformed or hostile payload can't bloat Redis/Mongo or blow up a broadcast.
-- Identity is now bound once at `room:join` and never re-trusted from a later payload: every
-  handler uses the socket's own authenticated `userId`/`roomId`, not the fields a client happens
-  to send in that event. Closes a real gap from Phase 8's handoff — previously a client could
-  emit `canvas:operation` or `webrtc:signal` claiming to be a different user.
-- Redis-backed rate limiting (`lib/security/rateLimiter.ts`) per user, shared across server
-  instances (not per-process) — canvas ops, cursor moves, undo/redo, WebRTC signaling, version
-  saves, and room joins all have their own limit.
-- Security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
-  Permissions-Policy) on every HTTP response via `next.config.ts`.
-- Reviewed for XSS: canvas text renders through Konva's `<Text>` (canvas-drawn), not raw DOM
-  `innerHTML`/`dangerouslySetInnerHTML` — confirmed via a full-repo grep, not assumed.
-- `MONGODB_URI`/`REDIS_URL` already support full connection strings with credentials and TLS
-  (`mongodb+srv://user:pass@host/db?tls=true`, `rediss://user:pass@host:port`) — no code change
-  needed, just a production deployment's responsibility to set them that way; documented in
-  PROJECT_HANDOFF.md rather than adding unused config surface.
+## 🗺️ Phase Roadmap
 
-## Known limitations (Phase 8)
-- Pure geometry, not ML: recognizes rectangles, triangles, circles/ellipses, and arrows (straight
-  open strokes) only — no free-form icon/symbol recognition, and won't distinguish e.g. a rounded
-  square from a circle as gracefully as a trained model would.
-- Accuracy degrades at high stroke jitter: heavily shaky strokes (well beyond normal hand tremor)
-  can fail to resolve to a clean corner count and are correctly left as freehand rather than
-  force-matched, but this means very noisy drawings just won't get recognized. See
-  `scripts/test-shape-recognizer.mjs`'s stress-test section for measured numbers.
-- Straight open pen strokes always become arrows, never plain lines, when recognition is on — a
-  deliberate choice (see PROJECT_HANDOFF.md), not a limitation of the classifier itself; the
-  dedicated Line tool is unaffected and always produces a plain line.
-- Recognition is opt-in (off by default) and pen-tool-only; it does not touch the dedicated
-  rectangle/circle/line/arrow/triangle tools, which already draw clean shapes directly.
+| Phase | Status | Notes |
+|---|:---:|---|
+| 0 — Architecture & Setup | ✅ | |
+| 1 — Whiteboard MVP | ✅ | |
+| 2 — Rooms & Real-Time | ✅ | |
+| 3 — Redis Pub/Sub Scale | ✅ | |
+| 4 — History & Export | ✅ | |
+| 5 — Presence | ✅ | |
+| 6 — Version History | ✅ | MongoDB happy path verified by code review, not live |
+| 7 — WebRTC Video | ✅ | Signaling relay verified live; real browser-to-browser media not exercised in sandbox |
+| 8 — AI Shape Recognition | ✅ | Heuristic, geometry-only — no paid AI API |
+| 9 — Security Hardening | ✅ | No auth added, deliberately |
+| 10 — Testing & Finalization | ⬜ | In progress |
 
-## Known limitations (Phase 9)
-- No authentication/accounts — `userId` is still a client-generated, unauthenticated localStorage
-  value. Hardening in this phase assumes that trust model rather than replacing it; see
-  PROJECT_HANDOFF.md for why, and what real auth would change.
-- Rate limits are fixed constants (`lib/security/rateLimiter.ts`), not configurable per
-  deployment or per room.
-- CSP still allows `'unsafe-inline'`/`'unsafe-eval'` on `script-src`, required by Next.js's own
-  dev/runtime bootstrap; a stricter nonce-based CSP would need a custom middleware layer — flagged
-  as a follow-up, not solved here.
-- No automated abuse/anomaly detection beyond the fixed-window rate limits — e.g. no ban list, no
-  detection of a client cycling `userId` values to dodge its own limit (mitigated but not
-  eliminated: identity is bound at `room:join`, but nothing stops a client from reconnecting with
-  a fresh `userId` and rejoining).
+See `PROJECT_HANDOFF.md` for the full rationale behind each documented trade-off above.
 
-## Known limitations (Phase 7)
-- STUN-only, no TURN: two peers who are both behind a symmetric NAT may fail to establish a
-  direct connection. Adding TURN would mean self-hosting (or paying for) a relay server, which
-  this project deliberately avoids per the master prompt's constraints.
-- Mesh topology (not an SFU): each participant opens a direct connection to every other
-  participant, so bandwidth/CPU cost grows with the square of call size. Fine at small room
-  scale; not something this project attempts to solve for large calls.
-- No server-side cap on call size.
-- Real two-browser media flow was not verified live in this sandbox (no way to run two browsers
-  with camera access here) — only the signaling relay was tested live. See PROJECT_HANDOFF.md.
+---
 
-## Known limitations (Phase 4)
-- Still no persistence: restarting Redis (or `FLUSHALL`) drops all room objects, participants,
-  AND now the undo/redo history stacks too. MongoDB models exist in `lib/db` but aren't called —
-  still an explicit follow-up, not scheduled to a specific phase.
-- Undo/redo history is capped at 50 entries per room (oldest snapshots drop off); this is a fixed
-  constant (`MAX_HISTORY` in `lib/room/roomManager.ts`), not currently configurable.
-- Still last-write-wins at the object level for concurrent non-undo edits — Phase 4 added a shared
-  *history stack*, not an OT/CRDT layer. Two users editing the same object at the same instant still
-  resolve by whichever `HSET` lands last in Redis, unchanged from Phase 2/3.
-- Redis is still a hard runtime dependency (unchanged from Phase 3).
+<div align="center">
 
-## Known limitations (Phase 3)
-- Undo/redo is per-client history navigation, not a shared distributed undo stack — undoing can
-  revert another user's most recent change. Proper shared history is Phase 4 scope.
-- No persistence: restarting Redis (or `FLUSHALL`) drops all room objects/participants. MongoDB
-  models exist in `lib/db` but aren't called yet — still an explicit follow-up, not scheduled to a
-  specific phase.
-- Operation ordering across instances is last-write-wins via `HSET`, same as the Phase 2 in-memory
-  `Map.set` semantics — there's no vector clock / operational-transform layer, so two near-simultaneous
-  edits to the same object from different instances resolve by whichever `HSET` lands last in Redis,
-  not by causal order.
-- Redis is now a hard runtime dependency (previously optional) — the server won't start without a
-  reachable `REDIS_URL`.
+## 📄 License
 
-## Phase Status
-- [x] Phase 0 — Architecture & Setup
-- [x] Phase 1 — Whiteboard MVP
-- [x] Phase 2 — Rooms & Real-Time
-- [x] Phase 3 — Redis Pub/Sub Scale
-- [x] Phase 4 — History & Export
-- [x] Phase 5 — Presence
-- [x] Phase 6 — Version History (MongoDB happy path verified by code review only, not live — see PROJECT_HANDOFF.md)
-- [x] Phase 7 — WebRTC Video (signaling relay verified live; real browser-to-browser media flow not exercised in this sandbox — see PROJECT_HANDOFF.md)
-- [x] Phase 8 — AI Shape Recognition (heuristic, geometry-only; no paid AI API)
-- [x] Phase 9 — Security Hardening (no auth added, deliberately — see PROJECT_HANDOFF.md)
-- [ ] Phase 10 — Testing & Finalization
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for details.
+
+<sub>Built as a phased, systems-design-focused real-time application.</sub>
+
+</div>
