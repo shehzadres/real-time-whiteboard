@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch server/index.ts",
     "dev:next-only": "next dev --turbopack",
-    "build": "next build",
+    "build": "rimraf .next && next build",
     "start": "NODE_ENV=production tsx server/index.ts",
     "lint": "eslint"
   },
@@ -28,6 +28,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-konva": "^19.2.5",
+    "rimraf": "^6.0.1",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "tailwindcss": "^4",
