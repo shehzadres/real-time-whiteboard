@@ -30,8 +30,12 @@ export function getOrCreateUser(): User {
   return user;
 }
 
+// Client-side trim/cap mirrors the server-side bound in lib/security/validation.ts
+// (userSchema.username, max 40) -- this is defense in depth for UX only (fails fast, no round
+// trip needed to find out a name was rejected); the server never trusts this and validates again.
 export function updateUsername(username: string): User {
-  const user = { ...getOrCreateUser(), username };
+  const trimmed = username.trim().slice(0, 40) || getOrCreateUser().username;
+  const user = { ...getOrCreateUser(), username: trimmed };
   localStorage.setItem('wb:user', JSON.stringify(user));
   return user;
 }

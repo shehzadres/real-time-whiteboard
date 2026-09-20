@@ -5,11 +5,14 @@
 Real-Time Collaborative Whiteboard
 
 ## Current Phase
-Phase 6 — Version History
+Phase 9 — Security & Production Hardening
 
 ## Phase Status
-COMPLETE (see caveat in KNOWN ISSUES: MongoDB happy path verified by code review, not live —
-no MongoDB available in this sandbox)
+COMPLETE. Runtime validation (zod) + Redis-backed rate limiting + server-side identity binding
+added to every Socket.io handler and the REST room-creation route, plus baseline HTTP security
+headers. No authentication was added -- a deliberate scope decision, see PHASE 9 ADDITIONS below.
+Verified with a new live scripted test (`scripts/test-phase9.mjs`, 11/11) plus regression runs of
+the existing Phase 7 socket test and the Phase 8 shape-recognizer unit tests.
 
 ## COMPLETED
 Phase 0 + Phase 1 + Phase 2 + Phase 3 (see DAILY_PROGRESS.md), plus in Phase 4:
@@ -342,20 +345,419 @@ this rather than asserting it works is the point of this note.
 7. Do NOT restart the project — Phase 0-6 architecture is in place and tested (module the MongoDB-happy-path caveat above)
 
 ---
-## GITHUB-READINESS PASS (2026-08-30, no feature work)
+## PHASE 7 ADDITIONS
 
-README.md was fully rewritten (hero image, badges, screenshots section using new `public/readme/`
-SVG assets, architecture diagram, reorganized by-capability feature list, tech stack table,
-project structure tree, corrected roadmap checklist, consolidated Known Limitations). Also added:
-`LICENSE` (MIT), `CONTRIBUTING.md`, `.github/workflows/ci.yml` (tsc + eslint + build on push/PR),
-and `.gitignore` (this last one was actually missing since Phase 0 despite being required by the
-master prompt — added in the Phase 6 session, noted here again for visibility). `eslint.config.mjs`
-now ignores `scripts/**` (the Phase 6 test script isn't part of the Next.js app and doesn't need
-app lint rules applied to it).
+### What changed in Phase 7
+- `types/index.ts`: added `WebRTCSignal` union type (`offer` / `answer` / `ice-candidate`), added
+  `inCall?: boolean` to `Participant`, added `webrtc:signal` to both `ServerToClientEvents` and
+  `ClientToServerEvents`. Broadened `participant:update` on both sides so `isEditing` and `inCall`
+  are each optional and independently patchable — a video-call join no longer needs to (and
+  doesn't) touch `isEditing`, and vice versa.
+- `server/socket.ts`: `participant:update` handler now builds a partial patch from only the fields
+  present in the incoming payload (`lastActiveAt` is always refreshed, `isEditing`/`inCall` only if
+  provided) before calling `updateParticipant`, and re-emits only what was actually patched. Added
+  `webrtc:signal` — a pure `socket.to(roomId)` relay of `{from, to, signal}`, no Redis/Mongo
+  involvement, same ephemeral treatment as `cursor:move`. There's no per-user socket-id tracking,
+  so this broadcasts to the whole room and each client is expected to ignore anything where
+  `to !== myUserId`.
+- `lib/webrtc/useWebRTC.ts` (new): the mesh WebRTC hook. Takes `{roomId, userId, participants,
+  active}` and returns local/remote streams plus mic/camera toggle state. Key design points:
+  - **Mesh, not SFU.** Every in-call participant opens a direct `RTCPeerConnection` to every other
+    in-call participant. Fine at the small room sizes this project targets; an SFU would need a
+    self-hosted (or paid) media server, which the master prompt explicitly says to avoid.
+  - **STUN only, no TURN.** Uses Google's public STUN servers. No relay fallback for peers both
+    behind symmetric NATs — documented as a known limitation, not solved, consistent with this
+    project's pattern of flagging real gaps instead of quietly working around them with paid
+    infrastructure.
+  - **Who offers whom is decided by comparing `userId` strings** (`myId < peerId` → I send the
+    offer), not by a server-assigned role. This deterministically avoids both sides of a pair
+    sending simultaneous offers ("glare") without any extra signaling round trip.
+  - **Connection membership is driven by the `inCall` flag already on `Participant`**, not by a
+    separate call-membership socket event. `startCall()` only broadcasts `inCall:true` (via
+    `participant:update`) *after* `getUserMedia` has actually resolved, which guarantees that by
+    the time any peer reacts to that flag and sends us an offer, our local tracks already exist to
+    add to the answer — no readiness race between "I said I'm in the call" and "my camera is
+    actually ready."
+  - A `wasActiveRef` guards the join/leave effect so mounting with `active=false` doesn't fire a
+    spurious `inCall:false` broadcast on first render.
+- `components/video/VideoOverlay.tsx` (new): floating bottom-right panel (not another right-side
+  drawer like Presence/Versions — deliberately a floating overlay per the master prompt's "Video
+  call overlay" wording). Shows a 2-column grid of video tiles (self + each remote peer, falling
+  back to an initials avatar when camera is off or stream isn't ready yet), mic/camera toggle
+  buttons, and a Leave button. Closing the panel (✕) does **not** end the call — it minimizes to a
+  small pulsing "Call · N" pill in the same corner, so audio/video keeps flowing while the user
+  works on the canvas; clicking the pill reopens the full panel. This required decoupling "is the
+  panel visible" (owned by `RoomClient`, mirrors `versionsOpen`) from "is media flowing"
+  (owned internally by `VideoOverlay`'s own `active` state) — the two were kept as separate booleans
+  on purpose rather than collapsing them into one.
+- `components/toolbar/Toolbar.tsx` / `components/room/RoomClient.tsx`: added a 🎥 button next to
+  the existing 🕐 version-history button; `RoomClient` owns `videoOpen` and always mounts
+  `<VideoOverlay>` (same always-mounted-but-conditionally-visible pattern `VersionHistoryPanel`
+  already uses), so `isOpen=false` never tears down an in-progress call.
+- `components/presence/PresencePanel.tsx`: added a small 🎥 indicator next to any participant whose
+  `inCall` is true — a low-cost way to see who's in the call without opening the video panel.
+- `components/canvas/Canvas.tsx`: `handleParticipantUpdate` now merges only the fields present in
+  the incoming payload (spread + conditional field assignment) instead of assuming `isEditing` is
+  always sent — needed once `participant:update` started carrying `inCall`-only updates too.
 
-None of this changed any application code path — `tsc --noEmit`, `eslint .`, and `next build` were
-all re-verified clean after. Screenshots in the README are hand-built SVG mockups matching the real
-component styling, not actual screen captures (no browser available in that environment) — swap in
-real ones under `public/readme/` whenever convenient, filenames are already referenced correctly.
+### Design decisions
+- **Reused the existing `Participant`/`participant:update` plumbing for call membership instead of
+  inventing `video:join`/`video:leave` events.** `inCall` is presence data in exactly the same
+  sense `isEditing` already was (Phase 5) — persisted to Redis so late joiners see who's currently
+  in the call via the normal `room:state` snapshot, broadcast the same way, no new server-side
+  concept needed.
+- **Signaling relay is room-wide with client-side `to` filtering, not targeted by socket id.** The
+  server has never tracked per-user socket ids (Socket.io rooms are enough for every other
+  feature); adding that just for WebRTC felt like scope creep for a project this size. The
+  bandwidth cost is broadcasting offer/answer/ICE payloads to everyone in the room instead of just
+  the intended peer, which is negligible at the room sizes this project targets.
+- **No call size cap enforced.** Mesh cost grows O(N²) in peer connections; not a problem worth
+  solving preemptively without evidence real rooms need more than a handful of simultaneous video
+  participants — flagged here rather than guessed at.
+- **Camera/mic toggle mutes `MediaStreamTrack.enabled` rather than stopping/removing tracks.**
+  Keeps the peer connection and negotiated media sections stable (no renegotiation needed to
+  toggle back on), at the cost of the muted track still technically transmitting silence/black
+  frames rather than freeing the hardware — an acceptable tradeoff for a toggle that's expected to
+  be flipped frequently mid-call.
+
+### Known limitation: real peer-to-peer media flow not exercised live
+This sandbox has no way to run two real browser tabs with camera/microphone access, so the actual
+audio/video negotiation and media flow was **not** verified end-to-end here — same category of gap
+as Phase 6's MongoDB happy path. What WAS verified live (`scripts/test-phase7.mjs`, Redis running,
+two real Socket.io clients): (a) `participant:update` correctly relays an `inCall:true` patch
+without touching `isEditing`, and a later `isEditing`-only patch doesn't clobber `inCall` in the
+emitted payload; (b) `webrtc:signal` correctly relays offer, answer, and ICE-candidate payloads
+with `from`/`to`/`kind`/`sdp`/`candidate` intact; (c) pre-existing `canvas:operation` relay is
+unaffected by this phase's changes. **First thing to do in an environment with two real browsers
+available:** open the same room in two tabs (ideally two different machines/networks, since same-
+machine-two-tabs can behave differently for camera access and NAT traversal), click "Join call" on
+both, and confirm video/audio actually appears in both directions — flagging this rather than
+asserting it works is the point of this note, exactly as Phase 6 did for MongoDB.
+
+### Next Phase Roadmap (Phase 8 — AI Shape Recognition)
+1. Master prompt scope: let users draw a rough shape (circle, rectangle, arrow) and have it
+   snapped to a clean version. Master prompt explicitly says to prefer a solution that doesn't
+   require an expensive paid AI API — this points toward a geometric/heuristic classifier (analyze
+   the drawn point path's shape: closed vs open, aspect ratio, corner count via angle changes,
+   etc.) rather than calling out to a vision model, consistent with this project's "avoid paid
+   third-party services" pattern in Phases 3 and 7.
+2. Natural integration point: `Canvas.tsx`'s pen tool already collects a raw point path per stroke
+   (see the `pen` case in the drawing handlers) before committing it as a `CanvasObject` of type
+   `'pen'`/freehand. Recognition should run at commit time (mouseup), not live during the stroke —
+   classify the finished path, and if it confidently matches a known shape, replace the committed
+   object with the corresponding clean shape type (`rectangle`/`circle`/`arrow`) instead of the raw
+   point cloud, before it's broadcast via `canvas:operation`. This keeps recognition entirely
+   client-side and pre-broadcast, so remote peers just see a normal `add` op for a clean shape —
+   no new server or wire-format work needed.
+3. Needs a clear confidence threshold and a fallback: if the drawn path doesn't confidently match
+   any known shape, leave it as freehand rather than forcing a bad match — this should be a
+   deliberate, stated threshold choice, not silently baked in.
+4. Consider a toggle (toolbar button or pen-tool submode) rather than always-on recognition, since
+   always-on could surprise users who genuinely want freehand strokes to stay freehand.
+5. Performance-conscious per the master prompt: this needs to run synchronously (or fast enough to
+   feel synchronous) on stroke completion — a heuristic geometric classifier should comfortably
+   meet this without needing a worker thread, but confirm with a rough timing check once built
+   rather than assuming.
+
+## HOW TO CONTINUE (Phase 8)
+1. Read PROJECT_HANDOFF.md (this file), README.md, DAILY_PROGRESS.md
+2. Start Redis locally (required). MongoDB optional (Phase 6 version history). No new env vars
+   from Phase 7 — WebRTC uses only public STUN servers, nothing to configure.
+3. Run: `npm install && npm run dev`
+4. Re-verify Phase 7: open a room in two tabs, click the 🎥 button, click "Join call" in both —
+   confirm the panel shows both video tiles (or initials avatars if camera permission is denied)
+   and that closing the panel (✕) leaves a reopenable "Call · N" pill rather than ending the call.
+   This is also the first real opportunity to confirm actual media flow, which this session could
+   not verify (see the Known Limitation note above).
+5. Run `node scripts/test-phase7.mjs` against a running dev server (`PORT` matching the script's
+   `URL`, currently 4301 — adjust either to match) to re-confirm the signaling relay and inCall
+   presence patch logic before making further changes there.
+6. Begin Phase 8 using the roadmap above
+7. Do NOT restart the project — Phase 0-7 architecture is in place and tested (modulo the two
+   flagged live-verification gaps: MongoDB happy path from Phase 6, real WebRTC media flow from
+   Phase 7)
+
+---
+## PHASE 8 ADDITIONS
+
+### What changed in Phase 8
+- `lib/canvas/shapeRecognizer.ts` (new): pure-geometry classifier, no dependencies, no React/DOM
+  reference — takes a flat `[x0,y0,x1,y1,...]` point array and returns a `RecognizedShape`
+  (`rectangle` / `circle` / `triangle` / `arrow`) or `null`. Algorithm:
+  1. Compute bounding box + diagonal; reject strokes under 12px diagonal (accidental click-drags).
+  2. Decide open vs. closed by whether the stroke's start and end points are within 28% of the
+     bbox diagonal of each other.
+  3. **Closed**: smooth the path (moving-average, window 3) to absorb hand tremor, then run
+     Ramer-Douglas-Peucker simplification (epsilon = 6% of diagonal) to find corners, deduping
+     points closer than 5% of the diagonal. Exactly 3 corners → triangle; exactly 4 → rectangle.
+     Anything else falls back to an isoperimetric-quotient circularity check
+     (`4·π·area / perimeter²`, shoelace-formula area) — above 0.75 → circle/ellipse (bbox-centered,
+     radii from bbox half-width/half-height); otherwise `null` (left as freehand — tested against a
+     5-pointed star to confirm it doesn't force-match).
+  4. **Open**: reject if start-to-end span is under 50% of the bbox diagonal (a curl that
+     happens to end near its own extent, not a deliberate stroke) or if any point deviates more
+     than 12% of the span from the straight start-end chord (too wavy). Otherwise → arrow,
+     using just the stroke's first and last point as its two endpoints.
+- `components/canvas/Canvas.tsx`: added `aiRecognition: boolean` prop and a `maybeRecognizeShape`
+  helper called from `handleMouseUp` right before a valid pen stroke is committed. Only ever
+  transforms the object being committed (id/stroke/strokeWidth/fill preserved, geometry replaced)
+  or returns it unchanged — never drops a stroke. Runs client-side, pre-broadcast: remote peers
+  just receive a normal `add` operation for whatever shape type was decided locally, so no
+  `types/index.ts`, `server/socket.ts`, or `roomManager.ts` changes were needed at all this phase.
+- `components/toolbar/Toolbar.tsx`: added a ✨ toggle button (near the tool list, since it only
+  affects the Pen tool) with `aiRecognition`/`onToggleAiRecognition` props, active-state styling
+  matching the existing tool-selection buttons.
+- `components/room/RoomClient.tsx`: owns the `aiRecognition` boolean (default `false`), passed to
+  both `Toolbar` and `Canvas`.
+- `scripts/test-shape-recognizer.mjs` (new): synthetic-stroke unit tests for the classifier —
+  generates jittered point paths for rectangles/triangles/circles/ellipses/straight-strokes (with
+  a seeded PRNG for reproducibility) plus negative cases (random scribble, tiny click-drag, wavy
+  sine-wave stroke, 5-pointed star), and asserts each classifies correctly. Run with
+  `npx tsx scripts/test-shape-recognizer.mjs`. No browser, server, Redis, or MongoDB needed — this
+  phase's core logic is pure and testable in complete isolation, unlike every prior phase.
+
+### Design decisions
+- **Geometric heuristic, not an ML/vision model.** The master prompt explicitly calls for an
+  architecture that doesn't require an expensive paid AI API; a small, fast, fully-offline
+  classifier meets the "rough circle → clean circle" style requirement without any external
+  dependency, consistent with this project's STUN-only (Phase 7) and no-paid-services pattern.
+- **Recognition happens once, at stroke completion (mouseup), not live during the stroke.** Live
+  reclassification on every `mousemove` would flicker the in-progress shape and cost CPU for no
+  real benefit — the master prompt's "performance-conscious" requirement is trivially satisfied by
+  running a synchronous, sub-millisecond classifier a single time per stroke instead.
+- **Off by default, toolbar toggle, pen-tool-only.** Always-on recognition would silently mutate
+  strokes from users who want genuine freehand drawing (a sketch, handwriting-adjacent squiggle,
+  etc.) with no way to opt out short of undo. The dedicated rectangle/circle/line/arrow/triangle
+  tools are untouched by this phase — they already produce clean shapes directly and have no
+  reason to run through a recognizer.
+- **Corner detection takes priority over the circularity check**, not the reverse. An earlier
+  version checked roundness (centroid-distance variance) first and it misclassified rectangles as
+  circles at low jitter (a distance-based roundness metric is misleadingly low for a rectangle
+  sampled with the same point density per edge regardless of edge length). Ordering corner
+  detection first — trusting a clean 3- or 4-corner result outright, and only falling back to a
+  circularity check when no clean polygon is found — fixed this and is more specific/robust in
+  general: a real polygon reliably produces a stable small corner count, while "roundness" is a
+  fuzzier signal that a genuinely round shape and a sampling artifact can both satisfy. Caught by
+  testing (`scripts/test-shape-recognizer.mjs`), not by inspection — documented here so a future
+  change to this file doesn't reintroduce a roundness-first ordering.
+- **Straight open strokes become arrows, not plain lines.** A deliberate, explicit call flagged
+  rather than picked silently: on a whiteboard, a quick straight freehand gesture is overwhelmingly
+  used to point at or connect something, and the dedicated Line tool remains available for anyone
+  who wants an explicit plain line untouched by recognition. This directly fulfills the master
+  prompt's own arrow example ("rough arrow → clean arrow") without needing arrowhead-specific
+  stroke detection (e.g. a hook/barb at the stroke's end), which would need a much more complex
+  heuristic for a small accuracy gain.
+- **Moving-average smoothing (window 3) before corner detection, not before the circularity
+  check.** Smoothing helps corner detection specifically (it blurs jitter without erasing real
+  corners at this window size); applying it to the circularity check as well was tried and made no
+  measurable difference in testing, so it was left out of that path to keep the circularity
+  calculation working on the actual traced path.
+- **Confidence thresholds are named constants at the top of `shapeRecognizer.ts`**, each with a
+  one-line comment on what it controls and why that value — chosen by iterating against the test
+  harness (e.g. the circularity cutoff of 0.75 sits deliberately between a triangle's ~0.60 and a
+  square's ~0.785, so a clean square is still caught by the corner check first rather than ever
+  reaching the circularity fallback). If recognition feels too eager or too reluctant once used
+  with real strokes, these are the values to adjust — nothing else in the file should need to
+  change.
+
+### Known limitation: accuracy at high jitter, and untested against real human strokes
+`scripts/test-shape-recognizer.mjs`'s core suite (rectangles, triangles, circles, ellipses,
+straight-strokes, and four negative cases, all at a realistic ~3px jitter) is 29/29. A separate,
+explicitly non-gating stress test at 10px jitter on a 250x150 rectangle (a genuinely hard case for
+a pure-geometry approach) recognizes 3/5 — reported in the test output, not silently accepted or
+hidden. Additionally: all test input here is *synthetic* (programmatically generated polylines with
+random jitter), not captured from an actual human drawing with a mouse or touchscreen in a browser.
+Real strokes have different noise characteristics (variable speed, pauses, overshoot at corners)
+that synthetic jitter only approximates. **First thing to do in an environment with a real browser
+available:** open the whiteboard, enable the ✨ toggle, and hand-draw a few rough shapes to see how
+the thresholds feel in practice — flagging this rather than asserting the synthetic test results
+generalize perfectly is the point of this note, same pattern as Phase 6's MongoDB and Phase 7's
+WebRTC media-flow caveats.
+
+### Next Phase Roadmap (Phase 9 — Security & Production Hardening)
+1. Master prompt scope: input validation, auth/session security if auth is introduced, room
+   access control, socket security, rate limiting, environment variables, error handling, MongoDB
+   security, Redis security, WebRTC security considerations, XSS protection, production config.
+2. This project currently has **no authentication at all** — `userId` is a client-generated,
+   client-trusted value from `lib/canvas/userStore.ts` (localStorage), and `roomId` is an
+   unguessable-but-unauthenticated slug from `lib/room/roomId.ts`. Decide explicitly whether Phase
+   9 introduces real auth (a scope increase beyond "harden what exists") or hardens the current
+   trust model as-is (rate limiting, input validation, socket payload validation) without adding
+   accounts — flag this as a real decision point rather than picking silently, since it changes
+   the shape of the phase significantly.
+3. Concrete gaps to review: `server/socket.ts` handlers currently trust `roomId`/`userId` values
+   from the client on every event with no server-side ownership check (e.g. nothing stops client A
+   from emitting `history:undo` claiming to be `userId` B); no rate limiting on `canvas:operation`
+   or `cursor:move` (a malicious/buggy client could flood the room); no payload size/shape
+   validation on socket events beyond what TypeScript types suggest at compile time (types don't
+   validate at runtime) — consider a schema validator (e.g. zod, not yet a dependency) at the
+   socket entry points.
+4. `app/api/rooms/route.ts` (REST room creation) — review for injection/validation gaps.
+5. Review `.env.example` / `.gitignore` for anything that should be tightened before this is
+   pushed to a real GitHub repo (this was already deliberately kept out of git from Phase 0, but
+   worth a final pass).
+6. XSS: canvas text objects (`type: 'text'`) store user-entered strings rendered via Konva's
+   `<Text>` (canvas-drawn, not raw DOM `innerHTML`), which is inherently not an XSS vector the way
+   raw HTML injection would be — confirm this reasoning holds rather than assuming, and check
+   whether any other user-supplied string (room names, version labels, usernames) ever reaches
+   real DOM `innerHTML`/`dangerouslySetInnerHTML` anywhere in the app (a quick grep first).
+
+## HOW TO CONTINUE (Phase 9)
+1. Read PROJECT_HANDOFF.md (this file), README.md, DAILY_PROGRESS.md
+2. Start Redis locally (required). MongoDB optional. No new env vars from Phase 8.
+3. Run: `npm install && npm run dev`
+4. Re-verify Phase 8: open a room, click the ✨ toggle, draw a rough circle/rectangle/triangle/
+   straight line with the Pen tool and confirm each snaps to the clean shape; draw a scribble and
+   confirm it stays freehand. This is also the first real opportunity to test the classifier
+   against actual human-drawn strokes, which this session could not do (see Known Limitation
+   above).
+5. Run `npx tsx scripts/test-shape-recognizer.mjs` to re-confirm the classifier logic before
+   touching `lib/canvas/shapeRecognizer.ts` further — it needs no server/Redis/Mongo, unlike every
+   other test script in this project.
+6. Begin Phase 9 using the roadmap above — start by deciding the auth-scope question (point 2)
+   before writing any code, since it changes what "harden" means for this phase.
+7. Do NOT restart the project — Phase 0-8 architecture is in place and tested (modulo the three
+   flagged live-verification gaps: MongoDB happy path from Phase 6, real WebRTC media flow from
+   Phase 7, and real human-drawn-stroke accuracy from Phase 8)
 
 
+## PHASE 9 ADDITIONS
+
+### What changed in Phase 9
+- Added `lib/security/validation.ts`: zod schemas for every `ClientToServerEvents` payload
+  (`room:join`, `canvas:operation`, `cursor:move`, `participant:update`, `history:undo/redo`,
+  `version:save/list/restore`, `webrtc:signal`, `room:leave`) and the `/api/rooms` POST body.
+  `parseOr(schema, data)` returns the parsed value or `null` (never throws), so every socket
+  handler stays a one-line early return on invalid input instead of a try/catch per call. Size
+  caps live here too: `CanvasObject.data` (freeform per-tool fields) capped at 200KB serialized;
+  WebRTC SDP/ICE payloads capped at 20KB.
+- Added `lib/security/rateLimiter.ts`: `checkRateLimit(key, limit, windowSeconds)` is a Redis
+  `INCR` + conditional `EXPIRE` fixed-window counter -- one round trip, no Lua script needed (unlike
+  Phase 4's history operations, this has no multi-step race to close). `checkEventRateLimit(event,
+  userId)` wraps it with the per-event limits in `RATE_LIMITS`. Redis-backed (not in-process) so
+  the limit is per-user across the whole deployment, consistent with roomManager/Socket.io-adapter
+  already being Redis-backed for the same multi-instance reason.
+- `server/socket.ts` rewritten: every `socket.on(...)` handler now (a) rate-limits by the
+  connection's own bound `currentUserId` (or by IP for `room:join`, before an identity exists),
+  (b) validates the payload with the matching zod schema and drops silently (no error emitted --
+  a malformed/hostile payload gets no signal back) on failure, (c) for anything
+  security-relevant, uses `currentUserId`/`currentRoomId` (set once at `room:join`, never
+  reassigned from a later payload) instead of the client-sent `userId`/`roomId`/`from` fields in
+  that event. `version:restore` additionally checks the fetched version's `roomId` matches the
+  requesting room (a version could otherwise be restored cross-room by guessing/enumerating a
+  `versionId`).
+- `app/api/rooms/route.ts`: zod-validated body, IP-scoped rate limit (20/min). Note: this route is
+  not actually called by the current UI (`app/page.tsx` generates the room id client-side and
+  navigates directly to `/room/[roomId]` -- unchanged since Phase 0/2) but was hardened anyway
+  since it's still a reachable public endpoint.
+- `next.config.ts`: added a `headers()` function applying CSP, `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and a
+  `Permissions-Policy` scoping camera/microphone to `self` (this app's own WebRTC call) and
+  denying everything else, to every response.
+- `lib/canvas/userStore.ts`: `updateUsername` now trims and caps at 40 chars client-side, mirroring
+  the server-side `userSchema` bound -- UX only (fail fast, no round trip), the server never
+  trusts this.
+- No code change to `lib/db/mongoose.ts` / `lib/redis/client.ts` connection strings: both already
+  read a full `MONGODB_URI`/`REDIS_URL` from env, which already supports credentials and TLS
+  (`mongodb+srv://user:pass@host/db?tls=true`, `rediss://user:pass@host:port`) -- adding
+  separate username/password/TLS env vars would just be redundant config surface for something
+  the URL scheme already covers. This is a deployment-time responsibility (set the URL correctly
+  in production), not something Phase 9 needed to add code for.
+
+### Design decisions
+- **Hardened the existing no-auth trust model; did not add authentication.** This was the
+  explicit decision point flagged in Phase 8's `PROJECT_HANDOFF.md` roadmap (point 2), decided
+  before writing any code rather than picked silently. Adding real accounts (signup/login,
+  session tokens, per-room access control tied to an identity provider) is a scope increase well
+  beyond "harden what exists" -- it changes the room-sharing model itself (currently: anyone with
+  the unguessable room URL can join as any self-chosen username, by design, since the master
+  prompt's own Phase 2 spec calls for shareable invite links with no mention of accounts). What
+  Phase 9 does instead is make that existing model safe to run: a client can no longer forge
+  another user's identity mid-session (the actual concrete risk in a no-auth design), flood the
+  server, or send malformed data that reaches Redis/Mongo unchecked. If real authentication is
+  wanted later, it's a new, larger phase, not a Phase 9 addendum.
+- **Identity bound once at `room:join`, never re-trusted from later payloads** -- rather than,
+  e.g., re-validating a signed token per event (which would require the auth system explicitly
+  deferred above) or trusting the client-sent `userId` field on each event (the pre-Phase-9
+  behavior, and the actual gap this closes). Binding at join and reading from the closure variable
+  for every subsequent event is the smallest change that stops identity spoofing without
+  introducing an auth system -- it doesn't prove a `userId` is really "owned" by anyone (there's
+  still no login), but it does guarantee one socket connection can't act as two different
+  identities in the same session, which is what made spoofing possible before.
+- **Invalid/rate-limited events are dropped silently, not rejected with an `error` event.** An
+  `error` emit back to a client that just sent a malformed or spoofed payload would (a) help an
+  attacker iterate toward a payload that passes validation, and (b) has no legitimate use for a
+  well-behaved client, since a well-behaved client only ever sends valid payloads under its own
+  identity in the first place. This is different from the existing `version:*` error emits (kept
+  unchanged), which report genuine backend failures (MongoDB down) to a legitimately-behaving
+  client, not a validation/ownership rejection.
+- **Fixed-window rate limiting (Redis `INCR`+`EXPIRE`), not a sliding window or token bucket.**
+  One round trip, no Lua script. The burst-at-window-boundary imprecision fixed windows have (a
+  client could in principle send ~2x the nominal limit right at a window edge) is an accepted
+  tradeoff here -- this is anti-flood/anti-abuse protection, not billing-grade metering, and the
+  limits themselves (e.g. 60 canvas ops/sec) are already well above legitimate single-user usage,
+  so the imprecision doesn't meaningfully weaken the protection.
+- **Size caps on `CanvasObject.data` and WebRTC signal payloads instead of a strict per-field
+  schema for either.** Both are intentionally open-ended (different tools/browsers populate
+  different fields), and schema-validating every field per shape type would need updating every
+  time a tool gains a field -- exactly the coupling the master prompt's "avoid over-engineering"
+  guidance warns against. A byte-size cap catches the actual risk (a client sending an absurdly
+  large payload to bloat Redis/Mongo or blow up a broadcast) without that coupling.
+- **CSP still allows `'unsafe-inline'`/`'unsafe-eval'` on `script-src`**, flagged rather than
+  silently accepted: Next.js's own dev/runtime bootstrap needs them, and a nonce-based CSP tight
+  enough to drop them would need a custom middleware layer generating a per-request nonce and
+  threading it through `<Script>` tags -- real additional work, not a one-line header change, so
+  it's called out here as a genuine follow-up rather than attempted incidentally in this phase.
+
+### Known limitation: no rate-limit evasion via userId cycling is fully closed
+Because there's still no authentication, a misbehaving client that disconnects and reconnects
+with a freshly-generated `userId` (trivial -- `lib/canvas/userStore.ts` stores it in
+`localStorage`, which a client fully controls) gets a fresh rate-limit quota, since limits are
+keyed by `userId`. IP-based limiting on `room:join` slows this down somewhat (a new identity still
+has to go through a fresh join) but doesn't eliminate it for an attacker with many IPs. This is an
+inherent consequence of the no-auth decision above, not an oversight -- closing it fully would
+require either per-connection (not per-claimed-identity) limiting in addition, or real
+authentication. Flagged here rather than assumed solved.
+
+### Next Phase Roadmap (Phase 10 — Testing & Finalization)
+1. Master prompt scope: test multiple clients, multiple rooms, concurrent editing,
+   disconnect/reconnect, undo/redo, export, version restore, video, AI recognition, responsive
+   UI, error states; fix discovered issues; clean unused files/dependencies; prepare final
+   GitHub-ready project.
+2. This project has three explicitly-flagged live-verification gaps from earlier phases that
+   Phase 10 is the natural point to close, given a real browser environment: MongoDB happy path
+   (Phase 6), real two-browser WebRTC media flow (Phase 7), and shape-recognizer accuracy against
+   actual human-drawn strokes rather than only synthetic point paths (Phase 8). None of these were
+   fixable in this sandbox (no browser with camera access, no MongoDB binary available here); they
+   remain the top verification priority once a full environment is available, not new work.
+3. `app/api/rooms/route.ts` is dead code (unused by the current UI, confirmed again in Phase 9) --
+   decide whether Phase 10 removes it or leaves it as a documented public API surface; either is
+   reasonable, but leaving it unaddressed silently is not.
+4. Sweep for unused dependencies/files per the master prompt's Phase 10 instructions --
+   `lib/db/mongoose.ts`/`models.ts` are used (version history), but worth a final check that
+   nothing else accumulated across 9 phases is now dead.
+5. Pre-existing eslint warnings noticed during Phase 9 (not introduced by Phase 9, not fixed
+   since out of that phase's scope): a `require()`-style import in `scripts/test-phase6.js`
+   (1 error) and a couple of unused-variable warnings in `PresencePanel.tsx`. Worth cleaning up
+   as part of Phase 10's "clean unused files" pass.
+6. Fix discovered issues per the master prompt's rule -- don't hide errors by disabling
+   functionality; document genuine blockers rather than silently dropping features.
+
+## HOW TO CONTINUE (Phase 10)
+1. Read PROJECT_HANDOFF.md (this file), README.md, DAILY_PROGRESS.md
+2. Start Redis locally (required). MongoDB optional but strongly recommended for this phase
+   specifically, since closing the Phase 6 MongoDB-happy-path gap is Phase 10's top item. No new
+   env vars from Phase 9.
+3. Run: `npm install && npm run dev`
+4. Re-verify Phase 9 first: run `node scripts/test-phase9.mjs` against a running server (11/11
+   expected) to confirm hardening still holds before testing anything else.
+5. Work through the master prompt's Phase 10 checklist directly against a real browser: multiple
+   tabs/clients, multiple rooms, concurrent editing, disconnect/reconnect, undo/redo, export,
+   version save/restore (with MongoDB actually running this time), video call between two real
+   tabs with camera/mic access, AI shape recognition with actual hand-drawn strokes, responsive
+   layout, and error states (kill Redis mid-session, kill MongoDB mid-session, send malformed
+   input via devtools console and confirm Phase 9's validation holds).
+6. Address the roadmap items above, in particular the three flagged live-verification gaps --
+   this is the first phase with a plausible real environment to close them in.
+7. Do NOT restart the project — Phase 0-9 architecture is in place and tested (modulo the
+   flagged live-verification gaps above, which are exactly what Phase 10 exists to close)

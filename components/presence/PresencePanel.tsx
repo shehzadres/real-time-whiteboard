@@ -9,7 +9,7 @@ interface Props {
   roomId: string;
 }
 
-function Avatar({ color, name, isEditing }: { color: string; name: string; isEditing: boolean }) {
+function Avatar({ color, name, isEditing, isYou }: { color: string; name: string; isEditing: boolean; isYou?: boolean }) {
   const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   return (
     <div className="relative flex-shrink-0">
@@ -85,14 +85,14 @@ export default function PresencePanel({ user, participants, roomId }: Props) {
 
       {/* Participant list */}
       <div className="flex-1 overflow-y-auto py-1.5 space-y-0.5">
-        {all.map((p) => {
+        {all.map((p, i) => {
           const isYou = p.userId === user.userId;
           return (
             <div
               key={p.userId}
               className="group flex items-center gap-2.5 px-3 py-2 mx-1 rounded-lg transition-colors duration-150 hover:bg-neutral-800/50"
             >
-              <Avatar color={p.color} name={p.username} isEditing={!isYou && p.isEditing} />
+              <Avatar color={p.color} name={p.username} isEditing={!isYou && p.isEditing} isYou={isYou} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-neutral-200 truncate font-medium leading-none">

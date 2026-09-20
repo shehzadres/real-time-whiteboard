@@ -12,9 +12,6 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Standalone Node test/dev harness scripts (run directly with node/tsx, not
-    // part of the Next.js app bundle) -- CommonJS require() is fine there.
-    "scripts/**",
   ]),
 ]);
 
