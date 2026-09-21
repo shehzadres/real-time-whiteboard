@@ -11,12 +11,13 @@
 [![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
 [![WebRTC](https://img.shields.io/badge/WebRTC-Mesh_Video-333333?logo=webrtc&logoColor=white)](https://webrtc.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-black?logo=vercel&logoColor=white)](https://real-time-whiteboard-mu.vercel.app)
 
 **A production-grade, multiplayer whiteboard — draw, sync, call, and version your canvas in real time.**
 
 Built with Next.js 16, Konva.js, Socket.io, Redis, and MongoDB.
 
-[Features](#-features) · [Screenshots](#-screenshots) · [Architecture](#-architecture) · [Getting Started](#-getting-started) · [Known Limitations](#-known-limitations) · [Roadmap](#-phase-roadmap)
+[Live Demo](#-live-demo) · [Features](#-features) · [Screenshots](#-screenshots) · [Architecture](#-architecture) · [Getting Started](#-getting-started) · [Known Limitations](#-known-limitations) · [Roadmap](#-phase-roadmap)
 
 </div>
 
@@ -26,6 +27,19 @@ Built with Next.js 16, Konva.js, Socket.io, Redis, and MongoDB.
 
 This is a **multi-phase build** of a real-time collaborative whiteboard app — the kind of tool behind products like Figma/FigJam or Miro, built from scratch to demonstrate real-time systems design: shared canvas state, horizontal scaling behind Redis, shared undo/redo, WebRTC video, AI-assisted shape recognition, and security hardening. Every phase below is shipped and working, not a mockup.
 
+
+## 🌐 Live Demo
+
+> **The app is deployed and publicly accessible.**
+
+| Service | URL |
+|---|---|
+| 🎨 **Frontend** (Vercel) | **[https://real-time-whiteboard-mu.vercel.app](https://real-time-whiteboard-mu.vercel.app)** |
+| ⚙️ **Socket.io Server** (Railway) | `https://whiteboard-socket-server-production.up.railway.app` |
+
+Open the frontend link, create a room, and share the room code or link with a friend to start collaborating in real time.
+
+---
 
 ## 📸 Screenshots
 
